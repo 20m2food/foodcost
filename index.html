@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
-<head>o
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#ffffff">
@@ -849,6 +849,9 @@
             📍 La trovi su <strong>console.anthropic.com</strong> → API Keys.<br>
             🔒 Non viene mai inviata a nessun server esterno.
         </div>
+        <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
+            🏷️ Versione 2.3 — Preparazioni
+        </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
             <button class="btn btn-p" onclick="salvaSettings()">Salva</button>
@@ -1441,11 +1444,38 @@ function switchTab(name) {
 
 function cxg(ing) { return (ing.prezzoLordo / (ing.resa / 100)) / 1000; }
 
-function cxp(p) {
-    return p.ricetta.reduce((t, r) => {
+// Peso totale di una scheda (somma dei grammi di ingredienti + preparazioni)
+function pesoPiatto(p) {
+    return (p.ricetta || []).reduce((t, r) => t + (parseFloat(r.grammi) || 0), 0);
+}
+
+// Costo materia prima di un piatto. Gestisce sia ingredienti (ingId) sia preparazioni annidate (prepId), con guardia anti-ciclo.
+function cxp(p, _seen) {
+    _seen = _seen || [];
+    if (!p || _seen.includes(p.id)) return 0;
+    const seen2 = _seen.concat(p.id);
+    return (p.ricetta || []).reduce((t, r) => {
+        if (r.prepId) {
+            const prep = db().piatti.find(x => x.id === r.prepId);
+            if (!prep) return t;
+            const peso = pesoPiatto(prep);
+            if (peso <= 0) return t;
+            const costoG = cxp(prep, seen2) / peso; // costo per grammo della preparazione
+            return t + costoG * (parseFloat(r.grammi) || 0);
+        }
         const ing = db().ingredienti.find(x => x.id === r.ingId);
         return t + (ing ? cxg(ing) * r.grammi : 0);
     }, 0);
+}
+
+// true se piattoId contiene (anche indirettamente) targetId tra le sue preparazioni
+function includeTransitivo(piattoId, targetId, _seen) {
+    _seen = _seen || [];
+    if (_seen.includes(piattoId)) return false;
+    const p = db().piatti.find(x => x.id === piattoId);
+    if (!p) return false;
+    const seen2 = _seen.concat(piattoId);
+    return (p.ricetta || []).some(r => r.prepId && (r.prepId === targetId || includeTransitivo(r.prepId, targetId, seen2)));
 }
 
 function esc(s) {
@@ -1774,6 +1804,7 @@ function confermaImportRicetta(){
 function eliminaPiatto(id) {
     mostraConfirm('Eliminare questa scheda piatto?', () => {
         db().piatti = db().piatti.filter(p => p.id !== id);
+        db().piatti.forEach(p => { p.ricetta = (p.ricetta || []).filter(r => r.prepId !== id); });
         salva();
     });
 }
@@ -1794,6 +1825,26 @@ function rimuoviIng(pid, iid) {
     salva();
 }
 
+// Aggiunge una preparazione (un altro piatto) come componente, con controllo anti-ciclo
+function aggiungiPrep(pid, selId, grId) {
+    const prepId = document.getElementById(selId).value;
+    const grammi = parseFloat(document.getElementById(grId).value);
+    if (!prepId || !grammi || grammi <= 0) return alert('Seleziona una preparazione e inserisci i grammi.');
+    if (prepId === pid) return alert('Un piatto non può contenere se stesso.');
+    if (includeTransitivo(prepId, pid)) return alert('Non posso aggiungerla: creerebbe un riferimento circolare (questa preparazione contiene già il piatto corrente).');
+    const p = db().piatti.find(x => x.id === pid);
+    const e = p.ricetta.find(r => r.prepId === prepId);
+    if (e) { e.grammi += grammi; } else { p.ricetta.push({ prepId, grammi }); }
+    salva();
+}
+
+function rimuoviPrep(pid, prepId) {
+    const p = db().piatti.find(x => x.id === pid);
+    if (!p) return;
+    p.ricetta = p.ricetta.filter(r => r.prepId !== prepId);
+    salva();
+}
+
 
 function renderRicettario() {
     const c = document.getElementById('contenitore-piatti');
@@ -1807,9 +1858,26 @@ function renderRicettario() {
 
     c.innerHTML = db().piatti.map(p => {
         const costo = cxp(p);
+        const altriPiatti = db().piatti
+            .filter(x => x.id !== p.id && !includeTransitivo(x.id, p.id))
+            .sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
+        const prepOpts = '<option value="">— Scegli preparazione —</option>'
+            + altriPiatti.map(x => `<option value="${x.id}">${esc(x.nome)}</option>`).join('');
         const righe = !p.ricetta.length
             ? `<tr><td colspan="4"><div class="empty" style="padding:20px"><div class="empty-txt">Nessun ingrediente aggiunto.</div></div></td></tr>`
             : p.ricetta.map(r => {
+                if (r.prepId) {
+                    const prep = db().piatti.find(x => x.id === r.prepId);
+                    if (!prep) return '';
+                    const peso = pesoPiatto(prep);
+                    const costoG = peso > 0 ? cxp(prep) / peso : 0;
+                    return `<tr>
+                        <td class="td-name">${esc(prep.nome)} <span class="ctag" style="background:rgba(124,58,237,0.1);color:#7c3aed">preparazione</span></td>
+                        <td class="td-m">${r.grammi} g</td>
+                        <td class="td-m">€ ${(costoG*r.grammi).toFixed(3)}</td>
+                        <td><button onclick="rimuoviPrep('${p.id}','${prep.id}')" class="btn-del" style="padding:4px 7px;font-size:12px">✕</button></td>
+                    </tr>`;
+                }
                 const i = db().ingredienti.find(x => x.id === r.ingId);
                 if (!i) return '';
                 return `<tr>
@@ -1852,6 +1920,14 @@ function renderRicettario() {
                     <div class="field fsm"><label>Grammi</label><input type="number" id="gr-${p.id}" min="1" placeholder="g"></div>
                     <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiIng('${p.id}','sel-${p.id}','gr-${p.id}')" class="btn btn-p">+ Aggiungi</button></div>
                 </div>
+                ${altriPiatti.length ? `<div class="add-row" style="border-style:solid;border-color:rgba(124,58,237,0.25);background:rgba(124,58,237,0.04)">
+                    <div class="field" style="flex:1">
+                        <label>Oppure aggiungi una preparazione (un'altra ricetta salvata)</label>
+                        <select id="prep-sel-${p.id}">${prepOpts}</select>
+                    </div>
+                    <div class="field fsm"><label>Grammi</label><input type="number" id="prep-gr-${p.id}" min="1" placeholder="g"></div>
+                    <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiPrep('${p.id}','prep-sel-${p.id}','prep-gr-${p.id}')" class="btn" style="background:#7c3aed;color:#fff">+ Preparazione</button></div>
+                </div>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -2072,7 +2148,11 @@ function aggiungiPiattoAMenu(menuId, selId){
         id: 'po' + Date.now(),
         categoria: 'Piatto',
         nome: p.nome,
-        voci: (p.ricetta || []).map(r => { const ing = ingById(r.ingId); return { nome: ing ? ing.nome : '(ingrediente)', grammi: r.grammi, ingId: r.ingId }; })
+        voci: (p.ricetta || []).map(r => {
+            if (r.prepId) { const prep = db().piatti.find(x => x.id === r.prepId); return { nome: prep ? prep.nome : 'preparazione', grammi: r.grammi, ingId: null }; }
+            const ing = ingById(r.ingId);
+            return { nome: ing ? ing.nome : '(ingrediente)', grammi: r.grammi, ingId: r.ingId };
+        })
     });
     salva();
 }
