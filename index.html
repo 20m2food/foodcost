@@ -718,18 +718,36 @@
                     </div>
                 </div>
 
+                <div class="card tg" style="border-color:rgba(138,114,181,0.3)">
+                    <div class="card-title" style="color:#8a72b5">🧪 Nuova Preparazione base <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">condivisa</span></div>
+                    <div class="card-sub">Semilavorati del laboratorio (salse, impasti, basi). Sono comuni a tutti i locali e non compaiono in dashboard.</div>
+                    <div class="form-grid fg2" style="margin-top:4px">
+                        <div class="field">
+                            <label>Nome della Preparazione</label>
+                            <input type="text" id="nuova-prep-nome" placeholder="es. Impasto polpette">
+                        </div>
+                        <div class="field">
+                            <label>&nbsp;</label>
+                            <button onclick="creaNuovaPreparazione()" class="btn" style="background:#8a72b5;color:#fff">+ Crea Preparazione</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="contenitore-preparazioni"></div>
+
                 <div class="card tg">
                     <div class="card-title">Nuovo Piatto / Tagliere</div>
+                    <div class="card-sub">Piatti del locale attivo (specifici di questa realtà).</div>
                     <div class="form-grid fg2" style="margin-top:4px">
                         <div class="field">
                             <label>Nome del Piatto</label>
-                            <input type="text" id="nuovo-piatto-nome" placeholder="es. Tagliere della Casa Medio">
+                            <input type="text" id="nuovo-piatto-nome" placeholder="es. Polpette fritte">
                         </div>
                         <div class="field">
                             <label>&nbsp;</label>
                             <button onclick="creaNuovoPiatto()" class="btn btn-g">+ Crea Scheda</button>
                         </div>
                     </div>
+                    <div id="import-piatto-wrap" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"></div>
                 </div>
                 <div id="contenitore-piatti"></div>
             </div>
@@ -876,7 +894,7 @@
         </div>
 
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 3.0 — Sync team
+            🏷️ Versione 3.1 — Magazzino e preparazioni condivisi
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -1018,14 +1036,41 @@ function salvaDB() {
 let appDB = caricaDB();
 
 // Retrocompatibilità: assicura che ogni locale abbia tutti gli array previsti
-(function normalizzaDB(){
-    (appDB.locali || []).forEach(l => {
-        if (!Array.isArray(l.ingredienti)) l.ingredienti = [];
-        if (!Array.isArray(l.piatti))      l.piatti = [];
-        if (!Array.isArray(l.menu))        l.menu = [];
-        l.ingredienti.forEach(i => { if (!i.unita) i.unita = 'g'; });
-    });
-})();
+// Migra/normalizza un DB al modello condiviso (magazzino + preparazioni + menu globali, piatti per locale)
+function migraENormalizza(D){
+    if (!D || typeof D !== 'object') return D;
+    if (!Array.isArray(D.locali)) D.locali = [];
+
+    if (!Array.isArray(D.ingredienti)) {
+        D.ingredienti  = [];
+        D.preparazioni = Array.isArray(D.preparazioni) ? D.preparazioni : [];
+        D.menu         = Array.isArray(D.menu) ? D.menu : [];
+
+        D.locali.forEach(l => {
+            (l.ingredienti || []).forEach(i => { if (!D.ingredienti.find(x => x.id === i.id)) D.ingredienti.push(i); });
+            (l.menu || []).forEach(m => { if (!D.menu.find(x => x.id === m.id)) D.menu.push(m); });
+        });
+        const prepIds = new Set();
+        D.locali.forEach(l => (l.piatti || []).forEach(p => (p.ricetta || []).forEach(r => { if (r.prepId) prepIds.add(r.prepId); })));
+        D.locali.forEach(l => {
+            const restano = [];
+            (l.piatti || []).forEach(p => {
+                if (prepIds.has(p.id)) { if (!D.preparazioni.find(x => x.id === p.id)) D.preparazioni.push(p); }
+                else restano.push(p);
+            });
+            l.piatti = restano;
+            delete l.ingredienti;
+            delete l.menu;
+        });
+    }
+
+    if (!Array.isArray(D.preparazioni)) D.preparazioni = [];
+    if (!Array.isArray(D.menu))         D.menu = [];
+    D.ingredienti.forEach(i => { if (!i.unita) i.unita = 'g'; });
+    D.locali.forEach(l => { if (!Array.isArray(l.piatti)) l.piatti = []; });
+    return D;
+}
+migraENormalizza(appDB);
 
 // Dati di esempio per un nuovo locale
 function datiEsempio() {
@@ -1268,11 +1313,13 @@ function importaBackup(input) {
             input.value = ''; return;
         }
         const nLoc = parsed.locali.length;
-        const nIng = parsed.locali.reduce((t, l) => t + ((l.ingredienti || []).length), 0);
+        const nIng = Array.isArray(parsed.ingredienti)
+            ? parsed.ingredienti.length
+            : parsed.locali.reduce((t, l) => t + ((l.ingredienti || []).length), 0);
         if (!confirm(`Ripristinare questo backup?\n\n${nLoc} locali · ${nIng} ingredienti.\n\n⚠️ Sostituirà TUTTI i dati attuali su questo dispositivo.`)) {
             input.value = ''; return;
         }
-        appDB = parsed;
+        appDB = migraENormalizza(parsed);
         if (!appDB.localeAttivoId && appDB.locali.length) appDB.localeAttivoId = appDB.locali[0].id;
         salvaDB();
         alert('✅ Backup ripristinato! L\'app si ricarica.');
@@ -1365,14 +1412,8 @@ function sbApplyPayload(payload, stamp){
     if (!payload) return;
     const incoming = payload.db || payload;
     if (!incoming || !Array.isArray(incoming.locali)) return;
-    appDB = incoming;
+    appDB = migraENormalizza(incoming);
     if (!appDB.localeAttivoId && appDB.locali.length) appDB.localeAttivoId = appDB.locali[0].id;
-    appDB.locali.forEach(l => {
-        if (!Array.isArray(l.ingredienti)) l.ingredienti = [];
-        if (!Array.isArray(l.piatti)) l.piatti = [];
-        if (!Array.isArray(l.menu)) l.menu = [];
-        l.ingredienti.forEach(i => { if (!i.unita) i.unita = 'g'; });
-    });
     if (typeof payload.anthropicApiKey === 'string' && payload.anthropicApiKey) {
         localStorage.setItem('anthropicApiKey', payload.anthropicApiKey);
     }
@@ -1408,7 +1449,7 @@ async function sbDoLogin(){
         await sbLogin(email, pass);
         const cloud = await sbPull();
         if (cloud && cloud.data) {
-            const haDatiLocali = (appDB.locali || []).some(l => (l.ingredienti || []).length || (l.piatti || []).length);
+            const haDatiLocali = (appDB.ingredienti||[]).length || (appDB.preparazioni||[]).length || (appDB.locali||[]).some(l => (l.piatti || []).length);
             let scarica = true;
             if (haDatiLocali) {
                 scarica = confirm('Sul cloud ci sono già dei dati del team.\n\nOK = scarico i dati del team su questo dispositivo (sostituiscono quelli locali).\nAnnulla = carico invece i dati di QUESTO dispositivo sul cloud (sovrascrivono quelli del team).');
@@ -1550,7 +1591,7 @@ function confermaImport() {
         if (prezzo <= 0) return;
 
         // Controlla se esiste già (per nome simile)
-        const esiste = db().ingredienti.find(i => i.nome.toLowerCase() === ing.nome.toLowerCase());
+        const esiste = appDB.ingredienti.find(i => i.nome.toLowerCase() === ing.nome.toLowerCase());
         if (esiste) {
             esiste.prezzoLordo = prezzo;
             esiste.resa = resa;
@@ -1567,7 +1608,7 @@ function confermaImport() {
                 unita: unita
             };
             if (unita === 'pz') nuovo.pezziConf = pezziConf;
-            db().ingredienti.push(nuovo);
+            appDB.ingredienti.push(nuovo);
         }
         importati++;
     });
@@ -1585,14 +1626,18 @@ function creaLocale() {
     const nome = document.getElementById('nuovo-locale-nome').value.trim();
     if (!nome) return alert('Inserisci un nome per il locale.');
 
-    const esempio = datiEsempio();
-    const nuovoLocale = {
-        id: 'locale_' + Date.now(),
-        nome: nome,
-        ingredienti: esempio.ingredienti,
-        piatti: esempio.piatti
-    };
+    // Magazzino e preparazioni sono condivisi: il primo locale in assoluto semina i dati di esempio globali.
+    if (!Array.isArray(appDB.ingredienti)) appDB.ingredienti = [];
+    if (!Array.isArray(appDB.preparazioni)) appDB.preparazioni = [];
+    if (!Array.isArray(appDB.menu)) appDB.menu = [];
+    let piattiIniziali = [];
+    if (!appDB.ingredienti.length) {
+        const esempio = datiEsempio();
+        appDB.ingredienti = esempio.ingredienti;
+        piattiIniziali = esempio.piatti;
+    }
 
+    const nuovoLocale = { id: 'locale_' + Date.now(), nome: nome, piatti: piattiIniziali };
     appDB.locali.push(nuovoLocale);
     appDB.localeAttivoId = nuovoLocale.id;
     salvaDB();
@@ -1698,7 +1743,7 @@ function renderLocaleList() {
         <div class="locale-card" onclick="selezionaLocale('${l.id}')">
             <div>
                 <div class="locale-card-name">${esc(l.nome)}</div>
-                <div class="locale-card-meta">${l.ingredienti.length} ingredienti · ${l.piatti.length} piatti</div>
+                <div class="locale-card-meta">${(appDB.ingredienti||[]).length} ingredienti (comuni) · ${(l.piatti||[]).length} piatti</div>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
                 <button onclick="event.stopPropagation();eliminaLocaleById('${l.id}')" style="background:none;border:1px solid rgba(220,38,38,0.25);border-radius:6px;color:var(--red);font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer;font-family:'Jost',sans-serif;transition:all .15s" onmouseover="this.style.background='var(--rsoft)'" onmouseout="this.style.background='none'">Elimina</button>
@@ -1783,25 +1828,25 @@ function cxp(p, _seen) {
     const seen2 = _seen.concat(p.id);
     return (p.ricetta || []).reduce((t, r) => {
         if (r.prepId) {
-            const prep = db().piatti.find(x => x.id === r.prepId);
+            const prep = appDB.preparazioni.find(x => x.id === r.prepId);
             if (!prep) return t;
             const peso = pesoPiatto(prep);
             if (peso <= 0) return t;
             const costoG = cxp(prep, seen2) / peso; // costo per grammo della preparazione
             return t + costoG * (parseFloat(r.grammi) || 0);
         }
-        const ing = db().ingredienti.find(x => x.id === r.ingId);
+        const ing = appDB.ingredienti.find(x => x.id === r.ingId);
         return t + (ing ? cxg(ing) * r.grammi : 0);
     }, 0);
 }
 
-// true se piattoId contiene (anche indirettamente) targetId tra le sue preparazioni
-function includeTransitivo(piattoId, targetId, _seen) {
+// true se prepId contiene (anche indirettamente) targetId tra le sue preparazioni
+function includeTransitivo(prepId, targetId, _seen) {
     _seen = _seen || [];
-    if (_seen.includes(piattoId)) return false;
-    const p = db().piatti.find(x => x.id === piattoId);
+    if (_seen.includes(prepId)) return false;
+    const p = appDB.preparazioni.find(x => x.id === prepId);
     if (!p) return false;
-    const seen2 = _seen.concat(piattoId);
+    const seen2 = _seen.concat(prepId);
     return (p.ricetta || []).some(r => r.prepId && (r.prepId === targetId || includeTransitivo(r.prepId, targetId, seen2)));
 }
 
@@ -1812,7 +1857,12 @@ function esc(s) {
 function salva() { salvaDB(); renderTutto(); sbScheduleSync(); }
 
 // ── MENU / EVENTI: helper food cost ──
-function ingById(id){ return db().ingredienti.find(x => x.id === id); }
+function ingById(id){ return appDB.ingredienti.find(x => x.id === id); }
+
+// Trova una "ricetta" (preparazione condivisa o piatto del locale attivo) per id
+function findRicetta(id){
+    return (appDB.preparazioni || []).find(x => x.id === id) || (db().piatti || []).find(x => x.id === id) || null;
+}
 
 function normNome(s){
     return String(s||'').toLowerCase()
@@ -1824,7 +1874,7 @@ function normNome(s){
 function abbinaIngrediente(nome){
     const n = normNome(nome);
     if(!n) return null;
-    const ings = db().ingredienti;
+    const ings = appDB.ingredienti;
     let hit = ings.find(i => normNome(i.nome) === n);
     if(hit) return hit.id;
     hit = ings.find(i => { const ni = normNome(i.nome); return ni && (ni.includes(n) || n.includes(ni)); });
@@ -1842,17 +1892,17 @@ function costoMenuCoperto(m){ return (m.portate||[]).reduce((t,po) => t + costoP
 // Una voce è "valorizzata" se ha un ingrediente a magazzino oppure un costo da preparazione
 function voceValorizzata(v){ return !!(v.ingId && ingById(v.ingId)) || (typeof v.costoG === 'number' && v.costoG > 0); }
 
-// Costo per grammo di una preparazione, calcolato nei prezzi di uno specifico locale (gestisce annidamenti)
-function costoGrammoPrepInLocale(loc, prepId, _seen){
+// Costo per grammo di una preparazione (pool condiviso, magazzino comune; gestisce annidamenti)
+function costoGrammoPrep(prepId, _seen){
     _seen = _seen || [];
-    const prep = (loc.piatti||[]).find(x => x.id === prepId);
+    const prep = (appDB.preparazioni||[]).find(x => x.id === prepId);
     if(!prep || _seen.includes(prepId)) return 0;
     const seen2 = _seen.concat(prepId);
     const peso = (prep.ricetta||[]).reduce((t,r) => t + (parseFloat(r.grammi)||0), 0);
     if(peso <= 0) return 0;
     const costoTot = (prep.ricetta||[]).reduce((t,r) => {
-        if(r.prepId) return t + costoGrammoPrepInLocale(loc, r.prepId, seen2) * (parseFloat(r.grammi)||0);
-        const ing = (loc.ingredienti||[]).find(x => x.id === r.ingId);
+        if(r.prepId) return t + costoGrammoPrep(r.prepId, seen2) * (parseFloat(r.grammi)||0);
+        const ing = (appDB.ingredienti||[]).find(x => x.id === r.ingId);
         if(!ing) return t;
         const cg = cxg(ing);
         return t + cg * (parseFloat(r.grammi)||0);
@@ -1871,7 +1921,7 @@ function vociMancanti(m){
 
 // Ri-abbina le voci dei menu quando si aggiunge un ingrediente al magazzino
 function riabbinaMenu(){
-    (db().menu||[]).forEach(m => (m.portate||[]).forEach(po => (po.voci||[]).forEach(v => {
+    (appDB.menu||[]).forEach(m => (m.portate||[]).forEach(po => (po.voci||[]).forEach(v => {
         if(!v.ingId && !(typeof v.costoG === 'number' && v.costoG > 0)){ const id = abbinaIngrediente(v.nome); if(id) v.ingId = id; }
     })));
 }
@@ -1899,7 +1949,7 @@ document.getElementById('form-ingrediente').addEventListener('submit', function(
         unita: unita
     };
     if (unita === 'pz') { ing.pezziConf = parseInt(document.getElementById('ing-pezzi').value) || 1; ing.resa = 100; }
-    db().ingredienti.push(ing);
+    appDB.ingredienti.push(ing);
     this.reset();
     document.getElementById('ing-resa').value = 100;
     document.getElementById('ing-unita').value = 'g';
@@ -1917,7 +1967,7 @@ function toggleUnitaMod(){
 }
 
 function apriModificaIngrediente(id) {
-    const i = db().ingredienti.find(x => x.id === id);
+    const i = appDB.ingredienti.find(x => x.id === id);
     if (!i) return;
     _modIngId = id;
     document.getElementById('modifica-ing-nome-label').textContent = i.nome;
@@ -1938,7 +1988,7 @@ function chiudiModificaIngrediente() {
 
 function salvaModificaIngrediente() {
     if (!_modIngId) return;
-    const i = db().ingredienti.find(x => x.id === _modIngId);
+    const i = appDB.ingredienti.find(x => x.id === _modIngId);
     if (!i) return;
     const nome    = document.getElementById('mod-nome').value.trim();
     const prezzo  = parseFloat(document.getElementById('mod-prezzo').value);
@@ -1961,20 +2011,21 @@ function salvaModificaIngrediente() {
 }
 
 function eliminaIngrediente(id) {
-    mostraConfirm('Eliminare questo ingrediente? Verrà rimosso anche dalle ricette.', () => {
-        db().ingredienti = db().ingredienti.filter(i => i.id !== id);
-        db().piatti.forEach(p => { p.ricetta = p.ricetta.filter(r => r.ingId !== id); });
-        (db().menu||[]).forEach(m => (m.portate||[]).forEach(po => (po.voci||[]).forEach(v => { if(v.ingId === id) v.ingId = null; })));
+    mostraConfirm('Eliminare questo ingrediente? Verrà rimosso anche dalle ricette di tutti i locali e dalle preparazioni.', () => {
+        appDB.ingredienti = appDB.ingredienti.filter(i => i.id !== id);
+        (appDB.locali||[]).forEach(l => (l.piatti||[]).forEach(p => { p.ricetta = (p.ricetta||[]).filter(r => r.ingId !== id); }));
+        (appDB.preparazioni||[]).forEach(p => { p.ricetta = (p.ricetta||[]).filter(r => r.ingId !== id); });
+        (appDB.menu||[]).forEach(m => (m.portate||[]).forEach(po => (po.voci||[]).forEach(v => { if(v.ingId === id) v.ingId = null; })));
         salva();
     });
 }
 
 function renderMagazzino() {
-    document.getElementById('cnt-mag').textContent = db().ingredienti.length;
+    document.getElementById('cnt-mag').textContent = appDB.ingredienti.length;
     document.getElementById('cnt-ric').textContent = db().piatti.length;
 
-    const n = db().ingredienti.length;
-    const med = n ? (db().ingredienti.reduce((s,i) => s + i.prezzoLordo, 0) / n) : 0;
+    const n = appDB.ingredienti.length;
+    const med = n ? (appDB.ingredienti.reduce((s,i) => s + i.prezzoLordo, 0) / n) : 0;
     document.getElementById('stats-mag').innerHTML = `
         <div class="stat-pill"><div class="stat-pill-label">Ingredienti</div><div class="stat-pill-val accent">${n}</div><div class="stat-pill-sub">nel magazzino</div></div>
         <div class="stat-pill"><div class="stat-pill-label">Prezzo Medio</div><div class="stat-pill-val orange">€${med.toFixed(2)}</div><div class="stat-pill-sub">€/Kg lordo medio</div></div>
@@ -1983,7 +2034,7 @@ function renderMagazzino() {
 
     const tb = document.getElementById('lista-ingredienti');
     const query = (document.getElementById('search-ingredienti')?.value || '').toLowerCase().trim();
-    const lista = [...db().ingredienti]
+    const lista = [...appDB.ingredienti]
         .sort((a,b) => a.nome.localeCompare(b.nome, 'it'))
         .filter(i => !query || i.nome.toLowerCase().includes(query) || (i.fornitore||'').toLowerCase().includes(query));
 
@@ -2038,11 +2089,40 @@ function creaNuovoPiatto() {
     salva();
 }
 
+function creaNuovaPreparazione() {
+    const nome = document.getElementById('nuova-prep-nome').value.trim();
+    if (!nome) return alert('Inserisci un nome per la preparazione.');
+    appDB.preparazioni.push({ id:'prep'+Date.now(), nome, ricetta:[] });
+    document.getElementById('nuova-prep-nome').value = '';
+    salva();
+}
+
+// Importa (duplica) un piatto da un altro locale nel locale attivo, come copia indipendente
+function importaPiatto(selId) {
+    const val = document.getElementById(selId).value;
+    if (!val) return;
+    const sep = val.indexOf('|');
+    if (sep < 0) return;
+    const locId = val.slice(0, sep);
+    const piattoId = val.slice(sep + 1);
+    const loc = appDB.locali.find(l => l.id === locId);
+    const orig = loc ? (loc.piatti || []).find(p => p.id === piattoId) : null;
+    if (!orig) return;
+    const copia = {
+        id: 'p' + Date.now(),
+        nome: orig.nome,
+        prezzoScelto: orig.prezzoScelto || 0,
+        ricetta: (orig.ricetta || []).map(r => Object.assign({}, r))
+    };
+    db().piatti.push(copia);
+    salva();
+}
+
 // ── IMPORTA RICETTA CON AI (testo o foto) ──
 let _ricettaCandidati = [];
 
 function _ricMagazzinoCtx(){
-    return db().ingredienti.map(ing => ({ nome: ing.nome, costoKg: +(ing.prezzoLordo/(ing.resa/100)).toFixed(2) }));
+    return appDB.ingredienti.map(ing => ({ nome: ing.nome, costoKg: +(ing.prezzoLordo/(ing.resa/100)).toFixed(2) }));
 }
 
 function _ricPrompt(magazzino){
@@ -2175,7 +2255,7 @@ function confermaImportRicetta(){
             if(!prezzo || prezzo <= 0) return; // non a magazzino e senza prezzo → escluso
             const resa = parseFloat(document.getElementById(`ric-resa-${idx}`)?.value) || 100;
             const nuovo = { id:'i'+Date.now()+idx, nome: nomeIng, prezzoLordo: prezzo, resa, fornitore:'—' };
-            db().ingredienti.push(nuovo);
+            appDB.ingredienti.push(nuovo);
             ingId = nuovo.id;
         }
         const esistente = ricetta.find(r => r.ingId === ingId);
@@ -2196,7 +2276,15 @@ function confermaImportRicetta(){
 function eliminaPiatto(id) {
     mostraConfirm('Eliminare questa scheda piatto?', () => {
         db().piatti = db().piatti.filter(p => p.id !== id);
-        db().piatti.forEach(p => { p.ricetta = (p.ricetta || []).filter(r => r.prepId !== id); });
+        salva();
+    });
+}
+
+function eliminaPreparazione(id) {
+    mostraConfirm('Eliminare questa preparazione? Verrà rimossa come componente da tutti i piatti e dalle altre preparazioni.', () => {
+        appDB.preparazioni = appDB.preparazioni.filter(p => p.id !== id);
+        appDB.preparazioni.forEach(p => { p.ricetta = (p.ricetta || []).filter(r => r.prepId !== id); });
+        (appDB.locali||[]).forEach(l => (l.piatti||[]).forEach(p => { p.ricetta = (p.ricetta || []).filter(r => r.prepId !== id); }));
         salva();
     });
 }
@@ -2204,34 +2292,37 @@ function eliminaPiatto(id) {
 function aggiungiIng(pid, sid, gid) {
     const ingId = document.getElementById(sid).value;
     const grammi = parseFloat(document.getElementById(gid).value);
-    if (!ingId || !grammi || grammi <= 0) return alert('Seleziona un ingrediente e inserisci i grammi.');
-    const p = db().piatti.find(x => x.id === pid);
+    if (!ingId || !grammi || grammi <= 0) return alert('Seleziona un ingrediente e inserisci la quantità.');
+    const p = findRicetta(pid);
+    if (!p) return;
     const e = p.ricetta.find(r => r.ingId === ingId);
     if (e) { e.grammi += grammi; } else { p.ricetta.push({ ingId, grammi }); }
     salva();
 }
 
 function rimuoviIng(pid, iid) {
-    const p = db().piatti.find(x => x.id === pid);
+    const p = findRicetta(pid);
+    if (!p) return;
     p.ricetta = p.ricetta.filter(r => r.ingId !== iid);
     salva();
 }
 
-// Aggiunge una preparazione (un altro piatto) come componente, con controllo anti-ciclo
+// Aggiunge una preparazione condivisa come componente, con controllo anti-ciclo
 function aggiungiPrep(pid, selId, grId) {
     const prepId = document.getElementById(selId).value;
     const grammi = parseFloat(document.getElementById(grId).value);
     if (!prepId || !grammi || grammi <= 0) return alert('Seleziona una preparazione e inserisci i grammi.');
-    if (prepId === pid) return alert('Un piatto non può contenere se stesso.');
-    if (includeTransitivo(prepId, pid)) return alert('Non posso aggiungerla: creerebbe un riferimento circolare (questa preparazione contiene già il piatto corrente).');
-    const p = db().piatti.find(x => x.id === pid);
+    if (prepId === pid) return alert('Una preparazione non può contenere se stessa.');
+    if (includeTransitivo(prepId, pid)) return alert('Non posso aggiungerla: creerebbe un riferimento circolare.');
+    const p = findRicetta(pid);
+    if (!p) return;
     const e = p.ricetta.find(r => r.prepId === prepId);
     if (e) { e.grammi += grammi; } else { p.ricetta.push({ prepId, grammi }); }
     salva();
 }
 
 function rimuoviPrep(pid, prepId) {
-    const p = db().piatti.find(x => x.id === pid);
+    const p = findRicetta(pid);
     if (!p) return;
     p.ricetta = p.ricetta.filter(r => r.prepId !== prepId);
     salva();
@@ -2239,27 +2330,22 @@ function rimuoviPrep(pid, prepId) {
 
 
 function renderRicettario() {
-    const c = document.getElementById('contenitore-piatti');
-    if (!db().piatti.length) {
-        c.innerHTML = `<div class="card"><div class="empty"><div class="empty-ico">🍽️</div><div class="empty-txt">Nessun piatto. Creane uno sopra.</div></div></div>`;
-        return;
-    }
-    const ingOrdinati = [...db().ingredienti].sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
+    const ingOrdinati = [...appDB.ingredienti].sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
     const opts = '<option value="">— Seleziona ingrediente —</option>'
         + ingOrdinati.map(i => `<option value="${i.id}">${esc(i.nome)}${i.unita==='pz'?' (pz)':''}</option>`).join('');
 
-    c.innerHTML = db().piatti.map(p => {
+    function cardRicetta(p, isPrep) {
         const costo = cxp(p);
-        const altriPiatti = db().piatti
+        const prepDisp = (appDB.preparazioni||[])
             .filter(x => x.id !== p.id && !includeTransitivo(x.id, p.id))
             .sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
         const prepOpts = '<option value="">— Scegli preparazione —</option>'
-            + altriPiatti.map(x => `<option value="${x.id}">${esc(x.nome)}</option>`).join('');
-        const righe = !p.ricetta.length
+            + prepDisp.map(x => `<option value="${x.id}">${esc(x.nome)}</option>`).join('');
+        const righe = !(p.ricetta||[]).length
             ? `<tr><td colspan="4"><div class="empty" style="padding:20px"><div class="empty-txt">Nessun ingrediente aggiunto.</div></div></td></tr>`
             : p.ricetta.map(r => {
                 if (r.prepId) {
-                    const prep = db().piatti.find(x => x.id === r.prepId);
+                    const prep = appDB.preparazioni.find(x => x.id === r.prepId);
                     if (!prep) return '';
                     const peso = pesoPiatto(prep);
                     const costoG = peso > 0 ? cxp(prep) / peso : 0;
@@ -2270,7 +2356,7 @@ function renderRicettario() {
                         <td><button onclick="rimuoviPrep('${p.id}','${prep.id}')" class="btn-del" style="padding:4px 7px;font-size:12px">✕</button></td>
                     </tr>`;
                 }
-                const i = db().ingredienti.find(x => x.id === r.ingId);
+                const i = appDB.ingredienti.find(x => x.id === r.ingId);
                 if (!i) return '';
                 return `<tr>
                     <td class="td-name">${esc(i.nome)}</td>
@@ -2280,21 +2366,26 @@ function renderRicettario() {
                 </tr>`;
             }).join('');
 
-        return `<div class="recipe-card">
+        const ico = isPrep ? '🧪' : '🍽️';
+        const delFn = isPrep ? `eliminaPreparazione('${p.id}')` : `eliminaPiatto('${p.id}')`;
+        const cardStyle = isPrep ? ' style="border-color:rgba(138,114,181,0.3)"' : '';
+        const tag = isPrep ? ' <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">condivisa</span>' : '';
+
+        return `<div class="recipe-card"${cardStyle}>
             <div class="recipe-head">
                 <div class="recipe-head-left">
-                    <div class="recipe-ico">🍽️</div>
+                    <div class="recipe-ico">${ico}</div>
                     <div>
-                        <div class="recipe-name">${esc(p.nome)}</div>
+                        <div class="recipe-name">${esc(p.nome)}${tag}</div>
                         <div class="recipe-meta">Costo MP: <span style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-weight:600">€ ${costo.toFixed(3)}</span></div>
                     </div>
                 </div>
-                <button onclick="eliminaPiatto('${p.id}')" class="btn-link-del">Elimina</button>
+                <button onclick="${delFn}" class="btn-link-del">Elimina</button>
             </div>
             <div class="recipe-body">
                 <div class="tbl-wrap">
                     <table>
-                        <thead><tr><th>Ingrediente</th><th>Grammi</th><th>Costo</th><th></th></tr></thead>
+                        <thead><tr><th>Ingrediente</th><th>Qtà</th><th>Costo</th><th></th></tr></thead>
                         <tbody>${righe}</tbody>
                         <tfoot><tr>
                             <td colspan="2" style="text-align:right;font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Totale MP</td>
@@ -2312,9 +2403,9 @@ function renderRicettario() {
                     <div class="field fsm"><label>Qtà</label><input type="number" id="gr-${p.id}" min="0" step="any" placeholder="g / pz"></div>
                     <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiIng('${p.id}','sel-${p.id}','gr-${p.id}')" class="btn btn-p">+ Aggiungi</button></div>
                 </div>
-                ${altriPiatti.length ? `<div class="add-row" style="border-style:solid;border-color:rgba(138,114,181,0.25);background:rgba(138,114,181,0.04)">
+                ${prepDisp.length ? `<div class="add-row" style="border-style:solid;border-color:rgba(138,114,181,0.25);background:rgba(138,114,181,0.04)">
                     <div class="field" style="flex:1">
-                        <label>Oppure aggiungi una preparazione (un'altra ricetta salvata)</label>
+                        <label>Oppure aggiungi una preparazione base (condivisa)</label>
                         <select id="prep-sel-${p.id}">${prepOpts}</select>
                     </div>
                     <div class="field fsm"><label>Grammi</label><input type="number" id="prep-gr-${p.id}" min="1" placeholder="g"></div>
@@ -2322,26 +2413,54 @@ function renderRicettario() {
                 </div>` : ''}
             </div>
         </div>`;
-    }).join('');
+    }
 
-    // Bind search inputs after render
-    db().piatti.forEach(p => {
+    const cp = document.getElementById('contenitore-preparazioni');
+    if (cp) {
+        cp.innerHTML = (appDB.preparazioni||[]).length
+            ? appDB.preparazioni.map(p => cardRicetta(p, true)).join('')
+            : `<div class="card"><div class="empty" style="padding:18px"><div class="empty-txt">Nessuna preparazione base. Creane una sopra (es. impasto polpette, salse del laboratorio).</div></div></div>`;
+    }
+
+    const c = document.getElementById('contenitore-piatti');
+    c.innerHTML = (db().piatti||[]).length
+        ? db().piatti.map(p => cardRicetta(p, false)).join('')
+        : `<div class="card"><div class="empty"><div class="empty-ico">🍽️</div><div class="empty-txt">Nessun piatto in questo locale. Creane uno sopra.</div></div></div>`;
+
+    renderImportPiatto();
+
+    const tutte = [...(appDB.preparazioni||[]), ...(db().piatti||[])];
+    tutte.forEach(p => {
         const searchEl = document.getElementById('search-' + p.id);
         const selEl    = document.getElementById('sel-' + p.id);
         if (!searchEl || !selEl) return;
         searchEl.addEventListener('input', function() {
             const val = this.value.toLowerCase().trim();
-            // Sync select: filter options
-            const ingOrdinati = [...db().ingredienti].sort((a,b) => a.nome.localeCompare(b.nome,'it'));
-            const filtrati = ingOrdinati.filter(i => !val || i.nome.toLowerCase().includes(val));
+            const ord = [...appDB.ingredienti].sort((a,b) => a.nome.localeCompare(b.nome,'it'));
+            const filtrati = ord.filter(i => !val || i.nome.toLowerCase().includes(val));
             selEl.innerHTML = '<option value="">— Seleziona ingrediente —</option>'
-                + filtrati.map(i => `<option value="${i.id}">${esc(i.nome)}</option>`).join('');
+                + filtrati.map(i => `<option value="${i.id}">${esc(i.nome)}${i.unita==='pz'?' (pz)':''}</option>`).join('');
             if (filtrati.length === 1) selEl.selectedIndex = 1;
-            // If exact datalist match, auto-select
-            const exact = db().ingredienti.find(i => i.nome.toLowerCase() === val);
+            const exact = appDB.ingredienti.find(i => i.nome.toLowerCase() === val);
             if (exact) selEl.value = exact.id;
         });
     });
+}
+
+function renderImportPiatto(){
+    const wrap = document.getElementById('import-piatto-wrap');
+    if (!wrap) return;
+    const altri = (appDB.locali||[]).filter(l => l.id !== appDB.localeAttivoId && (l.piatti||[]).length);
+    if (!altri.length) { wrap.innerHTML = '<div style="font-size:11px;color:var(--text3)">Per importare un piatto da un altro locale, prima crea piatti negli altri locali.</div>'; return; }
+    const groups = altri.map(l => `<optgroup label="${esc(l.nome)}">`
+        + (l.piatti||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'it')).map(p => `<option value="${l.id}|${p.id}">${esc(p.nome)}</option>`).join('')
+        + `</optgroup>`).join('');
+    wrap.innerHTML = `
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.6px">Importa un piatto da un altro locale (ne crea una copia modificabile qui)</label>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <select id="import-piatto-sel" style="flex:1;min-width:180px"><option value="">— Scegli un piatto —</option>${groups}</select>
+            <button onclick="importaPiatto('import-piatto-sel')" class="btn btn-g">↘ Importa</button>
+        </div>`;
 }
 
 // ═══════════════════════════════════════════
@@ -2424,7 +2543,7 @@ function _menuInput(){
 
 function creaMenuVuoto(){
     const i = _menuInput();
-    db().menu.unshift({ id:'m'+Date.now(), nome:i.nome, coperti:i.coperti, stile:i.stile, stagione:i.stagione, prezzoCoperto:i.prezzoCoperto, portate:[] });
+    appDB.menu.unshift({ id:'m'+Date.now(), nome:i.nome, coperti:i.coperti, stile:i.stile, stagione:i.stagione, prezzoCoperto:i.prezzoCoperto, portate:[] });
     salva();
 }
 
@@ -2440,7 +2559,7 @@ async function generaMenuAI(){
     if(btn) btn.disabled = true;
 
     // Contesto magazzino (nome + costo netto €/kg): l'AI preferisce questi ingredienti e rispetta il budget
-    const magazzino = db().ingredienti.map(ing => ({
+    const magazzino = appDB.ingredienti.map(ing => ({
         nome: ing.nome,
         costoKg: +(ing.prezzoLordo / (ing.resa/100)).toFixed(2)
     }));
@@ -2517,7 +2636,7 @@ Regole:
             }))
         }));
 
-        db().menu.unshift({ id:'m'+Date.now(), nome: parsed.nomeMenu || i.nome, coperti:i.coperti, stile:i.stile, stagione:i.stagione, prezzoCoperto:i.prezzoCoperto, portate });
+        appDB.menu.unshift({ id:'m'+Date.now(), nome: parsed.nomeMenu || i.nome, coperti:i.coperti, stile:i.stile, stagione:i.stagione, prezzoCoperto:i.prezzoCoperto, portate });
         salva();
         status.textContent = '✅ Menu generato!';
         status.style.color = 'var(--green)';
@@ -2536,45 +2655,41 @@ function aggiungiPiattoAMenu(menuId, selId){
     const sep = val.indexOf('|');
     const locId = sep >= 0 ? val.slice(0, sep) : appDB.localeAttivoId;
     const piattoId = sep >= 0 ? val.slice(sep + 1) : val;
-    const m = db().menu.find(x => x.id === menuId);
+    const m = appDB.menu.find(x => x.id === menuId);
     const srcLoc = appDB.locali.find(l => l.id === locId);
     const p = srcLoc ? (srcLoc.piatti||[]).find(x => x.id === piattoId) : null;
     if(!m || !p) return;
-    const stessoLocale = locId === appDB.localeAttivoId;
     m.portate.push({
         id: 'po' + Date.now(),
         categoria: 'Piatto',
         nome: p.nome,
         voci: (p.ricetta || []).map(r => {
             if (r.prepId) {
-                const prep = (srcLoc.piatti||[]).find(x => x.id === r.prepId);
-                return { nome: prep ? prep.nome : 'preparazione', grammi: r.grammi, ingId: null, costoG: costoGrammoPrepInLocale(srcLoc, r.prepId) };
+                const prep = appDB.preparazioni.find(x => x.id === r.prepId);
+                return { nome: prep ? prep.nome : 'preparazione', grammi: r.grammi, ingId: null, costoG: costoGrammoPrep(r.prepId) };
             }
-            const ing = (srcLoc.ingredienti||[]).find(x => x.id === r.ingId);
-            const nome = ing ? ing.nome : '(ingrediente)';
-            // Stesso locale: uso l'id esatto. Altro locale: abbino per nome al magazzino attivo.
-            const ingId = stessoLocale ? r.ingId : abbinaIngrediente(nome);
-            return { nome, grammi: r.grammi, ingId };
+            const ing = appDB.ingredienti.find(x => x.id === r.ingId);
+            return { nome: ing ? ing.nome : '(ingrediente)', grammi: r.grammi, ingId: r.ingId };
         })
     });
     salva();
 }
 
 function rimuoviPortata(menuId, poId){
-    const m = db().menu.find(x => x.id === menuId);
+    const m = appDB.menu.find(x => x.id === menuId);
     if(!m) return;
     m.portate = m.portate.filter(po => po.id !== poId);
     salva();
 }
 
 function eliminaMenu(menuId){
-    const m = db().menu.find(x => x.id === menuId);
+    const m = appDB.menu.find(x => x.id === menuId);
     if(!m) return;
-    mostraConfirm(`Eliminare il menu "${m.nome}"?`, () => { db().menu = db().menu.filter(x => x.id !== menuId); salva(); });
+    mostraConfirm(`Eliminare il menu "${m.nome}"?`, () => { appDB.menu = appDB.menu.filter(x => x.id !== menuId); salva(); });
 }
 
 function aggiornaPrezzoCoperto(menuId, el){
-    const m = db().menu.find(x => x.id === menuId);
+    const m = appDB.menu.find(x => x.id === menuId);
     if(!m) return;
     m.prezzoCoperto = parseFloat(el.value) || 0;
     salvaDB();
@@ -2582,7 +2697,7 @@ function aggiornaPrezzoCoperto(menuId, el){
 }
 
 function aggiornaCopertiMenu(menuId, el){
-    const m = db().menu.find(x => x.id === menuId);
+    const m = appDB.menu.find(x => x.id === menuId);
     if(!m) return;
     m.coperti = Math.max(1, parseInt(el.value) || 1);
     salvaDB();
@@ -2608,9 +2723,9 @@ function salvaMancante(){
     const resa = parseFloat(document.getElementById('manc-resa').value) || 100;
     const forn = document.getElementById('manc-forn').value.trim() || '—';
     if(!nome || isNaN(prezzo) || prezzo <= 0) return alert('Inserisci un nome e un prezzo validi.');
-    const esiste = db().ingredienti.find(i => i.nome.toLowerCase() === nome.toLowerCase());
+    const esiste = appDB.ingredienti.find(i => i.nome.toLowerCase() === nome.toLowerCase());
     if(esiste){ esiste.prezzoLordo = prezzo; esiste.resa = resa; esiste.fornitore = forn; }
-    else { db().ingredienti.push({ id:'i'+Date.now(), nome, prezzoLordo:prezzo, resa, fornitore:forn }); }
+    else { appDB.ingredienti.push({ id:'i'+Date.now(), nome, prezzoLordo:prezzo, resa, fornitore:forn }); }
     riabbinaMenu();
     chiudiMancante();
     salva();
