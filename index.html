@@ -685,6 +685,28 @@
 
             <!-- RICETTARIO -->
             <div id="sec-ricettario" class="hidden">
+                <!-- IMPORTA RICETTA AI -->
+                <div class="card" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(135deg,rgba(139,92,246,0.05),var(--surface))">
+                    <div class="card-title" style="color:#7c3aed">✨ Importa Ricetta con AI <span class="ctag" style="background:rgba(139,92,246,0.1);color:#7c3aed">beta</span></div>
+                    <div class="card-sub">Incolla il testo della ricetta o scattane una foto: l'AI crea la distinta base e la abbina ai prezzi del magazzino per il food cost.</div>
+                    <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+                        <div class="field"><label>Nome piatto (opz.)</label><input type="text" id="ric-nome" placeholder="es. Orecchiette cime di rapa"></div>
+                        <div class="field"><label>Per quante porzioni è?</label><input type="number" id="ric-porzioni" min="1" value="4"></div>
+                    </div>
+                    <div class="field" style="margin-bottom:12px">
+                        <label>Testo della ricetta</label>
+                        <textarea id="ric-testo" rows="4" placeholder="Incolla qui ingredienti e quantità…" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;resize:vertical"></textarea>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                        <button id="ric-btn-ai" onclick="analizzaRicettaTesto()" class="btn" style="background:#7c3aed;color:#fff;box-shadow:0 2px 10px rgba(124,58,237,0.3)">✨ Analizza testo</button>
+                        <label for="ric-foto-camera" class="btn" style="background:#fff;color:#7c3aed;border:1px solid #7c3aed;cursor:pointer">📷 Foto</label>
+                        <input type="file" id="ric-foto-camera" accept="image/*" capture="environment" style="display:none" onchange="analizzaRicettaFoto(this)">
+                        <label for="ric-foto-galleria" class="btn" style="background:#fff;color:#7c3aed;border:1px solid #7c3aed;cursor:pointer">🖼 Galleria</label>
+                        <input type="file" id="ric-foto-galleria" accept="image/*" style="display:none" onchange="analizzaRicettaFoto(this)">
+                        <span id="ric-status" style="font-size:12px;color:var(--text3);width:100%"></span>
+                    </div>
+                </div>
+
                 <div class="card tg">
                     <div class="card-title">Nuovo Piatto / Tagliere</div>
                     <div class="form-grid fg2" style="margin-top:4px">
@@ -891,6 +913,20 @@
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiMancante()">Annulla</button>
             <button class="btn btn-p" onclick="salvaMancante()">Salva e abbina</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL IMPORT RICETTA -->
+<div class="modal-overlay hidden" id="modal-ricetta-overlay" style="align-items:flex-end;padding:0">
+    <div class="modal" style="border-radius:var(--r3) var(--r3) 0 0;max-width:100%;width:100%;max-height:85vh;overflow-y:auto">
+        <div class="modal-title">🍽️ Ricetta rilevata</div>
+        <div class="modal-sub">Controlla ingredienti e grammi <strong>a porzione</strong>. Per quelli non a magazzino inserisci il prezzo €/Kg, oppure lasciali vuoti per escluderli.</div>
+        <div class="field" style="margin:4px 0 14px"><label>Nome piatto</label><input type="text" id="ric-imp-nome"></div>
+        <div id="ric-imp-lista"></div>
+        <div class="modal-actions" style="position:sticky;bottom:0;background:var(--surface);padding-top:12px">
+            <button class="btn btn-cancel" onclick="chiudiImportRicetta()">Annulla</button>
+            <button class="btn btn-p" onclick="confermaImportRicetta()">Crea piatto</button>
         </div>
     </div>
 </div>
@@ -1578,6 +1614,161 @@ function creaNuovoPiatto() {
     db().piatti.push({ id:'p'+Date.now(), nome, prezzoScelto:0, ricetta:[] });
     document.getElementById('nuovo-piatto-nome').value = '';
     salva();
+}
+
+// ── IMPORTA RICETTA CON AI (testo o foto) ──
+let _ricettaCandidati = [];
+
+function _ricMagazzinoCtx(){
+    return db().ingredienti.map(ing => ({ nome: ing.nome, costoKg: +(ing.prezzoLordo/(ing.resa/100)).toFixed(2) }));
+}
+
+function _ricPrompt(magazzino){
+    return `Sei un sous-chef preciso. Dalla ricetta che ricevi estrai il nome del piatto e TUTTI gli ingredienti con la quantità TOTALE dell'intera ricetta convertita in GRAMMI (NON dividere per le porzioni: ci penso io).
+Conversioni: 1 uovo ≈ 55g, 1 cucchiaio d'olio ≈ 12g, 1 cucchiaino ≈ 5g, 1 bicchiere di liquido ≈ 200g, 1 spicchio d'aglio ≈ 5g.
+
+INGREDIENTI GIÀ A MAGAZZINO (usa ESATTAMENTE questi nomi quando un ingrediente corrisponde, così si abbina ai prezzi):
+${magazzino.length ? JSON.stringify(magazzino) : 'nessuno'}
+
+Rispondi SOLO con JSON valido, senza testo né markdown:
+{
+  "nomePiatto": "nome del piatto",
+  "ingredienti": [ { "nome": "ingrediente", "grammiTotali": 0 } ]
+}
+Includi solo ingredienti alimentari con una quantità stimabile.`;
+}
+
+async function _chiamaRicettaAI(apiKey, content){
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true' },
+        body: JSON.stringify({ model: MODELLO_MENU, max_tokens: 2000, messages: [{ role:'user', content }] })
+    });
+    if(!response.ok){ const e = await response.json().catch(()=>({})); throw new Error(e.error?.message || `Errore HTTP ${response.status}`); }
+    const data = await response.json();
+    const t = (data.content||[]).filter(b => b.type === 'text').map(b => b.text).join('') || '{}';
+    let parsed;
+    try { parsed = JSON.parse(t.replace(/```json|```/g,'').trim()); }
+    catch { throw new Error('Risposta AI non leggibile'); }
+    if(!parsed.ingredienti || !parsed.ingredienti.length) throw new Error('Nessun ingrediente rilevato');
+    return parsed;
+}
+
+async function analizzaRicettaTesto(){
+    const testo = (document.getElementById('ric-testo').value || '').trim();
+    if(!testo) return alert('Incolla prima il testo della ricetta.');
+    const apiKey = localStorage.getItem('anthropicApiKey');
+    if(!apiKey){ alert('⚙️ Prima inserisci la tua API key dalle Impostazioni (icona ingranaggio in alto).'); return; }
+    const porzioni = Math.max(1, parseInt(document.getElementById('ric-porzioni').value) || 1);
+    const status = document.getElementById('ric-status');
+    const btn = document.getElementById('ric-btn-ai');
+    status.textContent = '✨ Analizzo la ricetta…'; status.style.color = 'var(--accent)';
+    if(btn) btn.disabled = true;
+    try {
+        const content = `${_ricPrompt(_ricMagazzinoCtx())}\n\nRICETTA:\n${testo}`;
+        const parsed = await _chiamaRicettaAI(apiKey, [{ type:'text', text: content }]);
+        mostraImportRicetta(parsed, porzioni);
+        status.textContent = '';
+    } catch(err){
+        status.textContent = '❌ ' + (err.message || 'Errore'); status.style.color = 'var(--red)';
+        console.error(err);
+    } finally { if(btn) btn.disabled = false; }
+}
+
+async function analizzaRicettaFoto(input){
+    const file = input.files[0];
+    if(!file) return;
+    const apiKey = localStorage.getItem('anthropicApiKey');
+    if(!apiKey){ alert('⚙️ Prima inserisci la tua API key dalle Impostazioni (icona ingranaggio in alto).'); input.value=''; return; }
+    const porzioni = Math.max(1, parseInt(document.getElementById('ric-porzioni').value) || 1);
+    const status = document.getElementById('ric-status');
+    status.textContent = '🖼 Preparazione immagine…'; status.style.color = 'var(--accent)';
+    let prepared;
+    try { prepared = await preparaImmagine(file); }
+    catch(err){ status.textContent = '❌ ' + (err.message || 'Errore immagine'); status.style.color = 'var(--red)'; input.value=''; return; }
+    status.textContent = '✨ Leggo la ricetta… (10-20 secondi)';
+    try {
+        const parsed = await _chiamaRicettaAI(apiKey, [
+            { type:'image', source:{ type:'base64', media_type:'image/jpeg', data: prepared.base64 } },
+            { type:'text', text: _ricPrompt(_ricMagazzinoCtx()) }
+        ]);
+        mostraImportRicetta(parsed, porzioni);
+        status.textContent = '';
+    } catch(err){
+        status.textContent = '❌ ' + (err.message || 'Errore'); status.style.color = 'var(--red)';
+        console.error(err);
+    }
+    input.value = '';
+}
+
+function mostraImportRicetta(parsed, porzioni){
+    document.getElementById('ric-imp-nome').value = (document.getElementById('ric-nome').value || '').trim() || parsed.nomePiatto || 'Nuovo piatto';
+    _ricettaCandidati = (parsed.ingredienti || []).map(ing => {
+        const gTot = Math.max(0, parseFloat(ing.grammiTotali) || 0);
+        const gPorz = Math.round((gTot / porzioni) * 10) / 10;
+        return { nome: ing.nome || '', grammi: gPorz, ingId: abbinaIngrediente(ing.nome) };
+    });
+    renderImportRicetta();
+    document.getElementById('modal-ricetta-overlay').classList.remove('hidden');
+}
+
+function renderImportRicetta(){
+    const lista = document.getElementById('ric-imp-lista');
+    lista.innerHTML = _ricettaCandidati.map((c, idx) => {
+        const matched = c.ingId && ingById(c.ingId);
+        const stato = matched
+            ? `<div style="font-size:11px;color:var(--green);font-weight:600;margin-top:8px">✓ a magazzino: ${esc(ingById(c.ingId).nome)}</div>`
+            : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+                   <div class="field"><label>€/Kg (nuovo)</label><input type="number" id="ric-prezzo-${idx}" step="0.01" min="0" placeholder="prezzo"></div>
+                   <div class="field"><label>Resa %</label><input type="number" id="ric-resa-${idx}" step="1" min="1" max="100" value="100"></div>
+               </div>
+               <div style="font-size:10px;color:var(--yellow);margin-top:4px">⚠ non a magazzino — inserisci il prezzo per conteggiarlo</div>`;
+        return `<div style="border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:10px;background:var(--surface2)">
+            <div style="display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="ric-check-${idx}" checked style="width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)">
+                <input type="text" id="ric-nome-${idx}" value="${esc(c.nome)}" style="flex:1;font-weight:600">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <label style="font-size:11px;color:var(--text3);font-weight:600;white-space:nowrap">Grammi / porzione</label>
+                <input type="number" id="ric-gr-${idx}" value="${c.grammi}" step="1" min="0" style="width:110px">
+            </div>
+            ${stato}
+        </div>`;
+    }).join('');
+}
+
+function chiudiImportRicetta(){ document.getElementById('modal-ricetta-overlay').classList.add('hidden'); _ricettaCandidati = []; }
+
+function confermaImportRicetta(){
+    const nome = document.getElementById('ric-imp-nome').value.trim() || 'Nuovo piatto';
+    const ricetta = [];
+    _ricettaCandidati.forEach((c, idx) => {
+        if(!document.getElementById(`ric-check-${idx}`)?.checked) return;
+        const nomeIng = (document.getElementById(`ric-nome-${idx}`)?.value || '').trim() || c.nome;
+        const grammi = parseFloat(document.getElementById(`ric-gr-${idx}`)?.value) || 0;
+        if(grammi <= 0) return;
+        let ingId = (c.ingId && ingById(c.ingId)) ? c.ingId : abbinaIngrediente(nomeIng);
+        if(!ingId){
+            const prezzo = parseFloat(document.getElementById(`ric-prezzo-${idx}`)?.value);
+            if(!prezzo || prezzo <= 0) return; // non a magazzino e senza prezzo → escluso
+            const resa = parseFloat(document.getElementById(`ric-resa-${idx}`)?.value) || 100;
+            const nuovo = { id:'i'+Date.now()+idx, nome: nomeIng, prezzoLordo: prezzo, resa, fornitore:'—' };
+            db().ingredienti.push(nuovo);
+            ingId = nuovo.id;
+        }
+        const esistente = ricetta.find(r => r.ingId === ingId);
+        if(esistente) esistente.grammi += grammi; else ricetta.push({ ingId, grammi });
+    });
+    if(!ricetta.length) return alert('Nessun ingrediente valido. Controlla i grammi e, per quelli non a magazzino, inserisci il prezzo.');
+    db().piatti.push({ id:'p'+Date.now(), nome, prezzoScelto:0, ricetta });
+    chiudiImportRicetta();
+    document.getElementById('ric-testo').value = '';
+    document.getElementById('ric-nome').value = '';
+    salva();
+    switchTab('ricettario');
+    const st = document.getElementById('ric-status');
+    st.textContent = `✅ Piatto "${nome}" creato con ${ricetta.length} ingredienti!`;
+    st.style.color = 'var(--green)';
 }
 
 function eliminaPiatto(id) {
