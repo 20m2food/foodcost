@@ -3,60 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#f2efe7">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Food Cost">
     <title>Food Cost Manager</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
         const manifest = {
             name:"Food Cost Manager",short_name:"Food Cost",
             description:"Gestionale food cost per enoteca",
             start_url:".",display:"standalone",
             background_color:"#ffffff",theme_color:"#ffffff",
-            icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text y='.9em' font-size='72' x='14'>🍷</text></svg>",sizes:"any",type:"image/svg+xml"}]
+            icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f6fb3'/><text y='.9em' font-size='72' x='14'>🍷</text></svg>",sizes:"any",type:"image/svg+xml"}]
         };
         const murl=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));
         document.write('<link rel="manifest" href="'+murl+'">');
     </script>
     <style>
         :root {
-            --bg:       #f4f5f7;
+            --bg:       #f2efe7;
             --surface:  #ffffff;
-            --surface2: #f9fafb;
-            --surface3: #f0f2f5;
-            --border:   rgba(0,0,0,0.08);
-            --border2:  rgba(0,0,0,0.14);
-            --text:     #111827;
-            --text2:    #4b5563;
-            --text3:    #9ca3af;
-            --accent:   #4f46e5;
-            --accent2:  #6366f1;
-            --asoft:    rgba(79,70,229,0.08);
-            --aborder:  rgba(79,70,229,0.2);
-            --green:    #059669;
-            --gsoft:    rgba(5,150,105,0.1);
-            --yellow:   #d97706;
-            --ysoft:    rgba(217,119,6,0.1);
-            --red:      #dc2626;
-            --rsoft:    rgba(220,38,38,0.08);
-            --orange:   #ea580c;
-            --osoft:    rgba(234,88,12,0.08);
+            --surface2: #faf8f2;
+            --surface3: #efebe1;
+            --border:   rgba(28,28,28,0.10);
+            --border2:  rgba(28,28,28,0.18);
+            --text:     #1c1c1c;
+            --text2:    #57534e;
+            --text3:    #a8a29a;
+            --accent:   #4f6fb3;
+            --accent2:  #6f8dcb;
+            --asoft:    rgba(79,111,179,0.10);
+            --aborder:  rgba(79,111,179,0.24);
+            --green:    #5f9e7f;
+            --gsoft:    rgba(95,158,127,0.14);
+            --yellow:   #c2902f;
+            --ysoft:    rgba(194,144,47,0.14);
+            --red:      #d2694f;
+            --rsoft:    rgba(210,105,79,0.12);
+            --orange:   #d98a4a;
+            --osoft:    rgba(217,138,74,0.12);
             --sidebar:  240px;
-            --r:        8px;
-            --r2:       12px;
-            --r3:       16px;
-            --shadow:   0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-            --shadow2:  0 4px 12px rgba(0,0,0,0.08);
+            --r:        7px;
+            --r2:       11px;
+            --r3:       15px;
+            --shadow:   0 1px 2px rgba(28,28,28,0.06), 0 1px 1px rgba(28,28,28,0.04);
+            --shadow2:  0 6px 18px rgba(28,28,28,0.08);
         }
 
         *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 
         html, body {
             height:100%; height:100dvh;
-            font-family:'Outfit',sans-serif;
+            font-family:'Jost',sans-serif;
             background:var(--bg);
             color:var(--text);
             font-size:14px;
@@ -83,11 +83,11 @@
 
         .sb-logo {
             width:38px; height:38px;
-            background:linear-gradient(135deg,#4f46e5,#7c3aed);
+            background:linear-gradient(135deg,#4f6fb3,#8a72b5);
             border-radius:10px;
             display:flex; align-items:center; justify-content:center;
             font-size:20px; margin-bottom:10px;
-            box-shadow:0 4px 12px rgba(79,70,229,0.3);
+            box-shadow:0 4px 12px rgba(79,111,179,0.3);
         }
 
         .sb-name { font-size:14px; font-weight:700; color:var(--text); letter-spacing:-0.3px; }
@@ -114,7 +114,7 @@
             cursor:pointer;
             transition:all .15s;
         }
-        .locale-current:hover { background:rgba(79,70,229,0.12); }
+        .locale-current:hover { background:rgba(79,111,179,0.12); }
 
         .locale-name {
             font-size:13px; font-weight:600; color:var(--accent);
@@ -151,7 +151,7 @@
             width:100%; padding:9px 12px;
             background:none; border:none;
             color:var(--accent); font-size:12px; font-weight:600;
-            cursor:pointer; font-family:'Outfit',sans-serif;
+            cursor:pointer; font-family:'Jost',sans-serif;
             border-top:1px solid var(--border);
             transition:background .15s;
         }
@@ -172,7 +172,7 @@
             border-radius:var(--r);
             background:none; border:none;
             color:var(--text2); font-size:13px; font-weight:500;
-            cursor:pointer; font-family:'Outfit',sans-serif;
+            cursor:pointer; font-family:'Jost',sans-serif;
             transition:all .15s; text-align:left;
             margin-bottom:1px;
         }
@@ -203,7 +203,7 @@
             width:100%; padding:8px 10px;
             border-radius:var(--r); background:none; border:none;
             color:var(--text3); font-size:12px; font-weight:500;
-            cursor:pointer; font-family:'Outfit',sans-serif; transition:all .15s;
+            cursor:pointer; font-family:'Jost',sans-serif; transition:all .15s;
         }
         .btn-reset-sb:hover { background:var(--rsoft); color:var(--red); }
 
@@ -277,7 +277,7 @@
             border:1px solid var(--border2);
             border-radius:var(--r);
             color:var(--text);
-            font-family:'Outfit',sans-serif;
+            font-family:'Jost',sans-serif;
             font-size:13px; font-weight:400;
             transition:border-color .15s, box-shadow .15s;
             -webkit-appearance:none; appearance:none;
@@ -307,17 +307,17 @@
         .btn {
             display:inline-flex; align-items:center; justify-content:center; gap:7px;
             padding:9px 18px; border-radius:var(--r);
-            font-family:'Outfit',sans-serif; font-size:13px; font-weight:600;
+            font-family:'Jost',sans-serif; font-size:13px; font-weight:600;
             cursor:pointer; border:none; transition:all .15s;
             white-space:nowrap; line-height:1;
         }
 
-        .btn-p { background:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(79,70,229,0.3); }
-        .btn-p:hover { background:#4338ca; transform:translateY(-1px); }
+        .btn-p { background:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(79,111,179,0.3); }
+        .btn-p:hover { background:#3f5d9c; transform:translateY(-1px); }
         .btn-p:active { transform:none; }
 
         .btn-g { background:var(--green); color:#fff; box-shadow:0 2px 8px rgba(5,150,105,0.25); }
-        .btn-g:hover { background:#047857; transform:translateY(-1px); }
+        .btn-g:hover { background:#4e8268; transform:translateY(-1px); }
 
         .btn-del {
             background:none; color:var(--text3);
@@ -329,7 +329,7 @@
         .btn-link-del {
             background:none; border:none; color:var(--text3);
             font-size:11px; font-weight:600; cursor:pointer;
-            font-family:'Outfit',sans-serif;
+            font-family:'Jost',sans-serif;
             text-decoration:underline; text-underline-offset:2px; transition:color .15s;
         }
         .btn-link-del:hover { color:var(--red); }
@@ -439,10 +439,10 @@
         .selector-inner { width:100%; max-width:420px; }
         .selector-logo {
             width:56px; height:56px;
-            background:linear-gradient(135deg,#4f46e5,#7c3aed);
+            background:linear-gradient(135deg,#4f6fb3,#8a72b5);
             border-radius:14px; display:flex; align-items:center; justify-content:center;
             font-size:28px; margin:0 auto 16px;
-            box-shadow:0 8px 24px rgba(79,70,229,0.35);
+            box-shadow:0 8px 24px rgba(79,111,179,0.35);
         }
         .selector-title { font-size:24px; font-weight:700; text-align:center; letter-spacing:-0.5px; margin-bottom:4px; }
         .selector-sub   { font-size:13px; color:var(--text3); text-align:center; margin-bottom:28px; }
@@ -467,7 +467,7 @@
             background:none; border:2px dashed var(--border2);
             border-radius:var(--r2); cursor:pointer;
             color:var(--accent); font-size:13px; font-weight:600;
-            font-family:'Outfit',sans-serif; transition:all .15s;
+            font-family:'Jost',sans-serif; transition:all .15s;
         }
         .btn-new-locale:hover { background:var(--asoft); border-color:var(--aborder); }
 
@@ -489,7 +489,7 @@
                 align-items:center; justify-content:center; gap:4px;
                 padding:10px 4px; background:none; border:none;
                 color:var(--text3); font-size:10px;
-                font-family:'Outfit',sans-serif; font-weight:600; cursor:pointer; transition:color .15s;
+                font-family:'Jost',sans-serif; font-weight:600; cursor:pointer; transition:color .15s;
             }
             .bnav-btn.active { color:var(--accent); }
             .bnav-ico { font-size:20px; }
@@ -517,7 +517,7 @@
 <div class="screen-selector" id="screen-selector">
     <div class="selector-inner">
         <div id="selector-back-wrap" style="margin-bottom:12px;display:none">
-            <button onclick="avviaApp()" style="background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;gap:4px;">← Torna al locale attivo</button>
+            <button onclick="avviaApp()" style="background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif;display:flex;align-items:center;gap:4px;">← Torna al locale attivo</button>
         </div>
         <div class="selector-logo">🍷</div>
         <div class="selector-title">Food Cost Manager</div>
@@ -605,16 +605,16 @@
                 <div class="stats-row" id="stats-mag"></div>
 
                 <!-- SCANSIONE FATTURA AI -->
-                <div class="card" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(135deg,rgba(139,92,246,0.05),var(--surface))">
-                    <div class="card-title" style="color:#7c3aed">📷 Scansione Fattura AI <span class="ctag" style="background:rgba(139,92,246,0.1);color:#7c3aed">beta</span></div>
+                <div class="card" style="border-color:rgba(138,114,181,0.3);background:linear-gradient(135deg,rgba(138,114,181,0.05),var(--surface))">
+                    <div class="card-title" style="color:#8a72b5">📷 Scansione Fattura AI <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">beta</span></div>
                     <div class="card-sub">Scatta una foto alla fattura del fornitore — l'AI rileva automaticamente ingredienti e prezzi</div>
                     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                        <label for="input-fattura-camera" class="btn" style="background:#7c3aed;color:#fff;box-shadow:0 2px 10px rgba(124,58,237,0.3);cursor:pointer">
+                        <label for="input-fattura-camera" class="btn" style="background:#8a72b5;color:#fff;box-shadow:0 2px 10px rgba(138,114,181,0.3);cursor:pointer">
                             📷 Scatta Foto
                         </label>
                         <input type="file" id="input-fattura-camera" accept="image/*" capture="environment" style="display:none" onchange="analizzaFattura(this)">
 
-                        <label for="input-fattura-galleria" class="btn" style="background:#fff;color:#7c3aed;border:1px solid #7c3aed;cursor:pointer">
+                        <label for="input-fattura-galleria" class="btn" style="background:#fff;color:#8a72b5;border:1px solid #8a72b5;cursor:pointer">
                             🖼 Carica da Galleria
                         </label>
                         <input type="file" id="input-fattura-galleria" accept="image/*" style="display:none" onchange="analizzaFattura(this)">
@@ -686,8 +686,8 @@
             <!-- RICETTARIO -->
             <div id="sec-ricettario" class="hidden">
                 <!-- IMPORTA RICETTA AI -->
-                <div class="card" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(135deg,rgba(139,92,246,0.05),var(--surface))">
-                    <div class="card-title" style="color:#7c3aed">✨ Importa Ricetta con AI <span class="ctag" style="background:rgba(139,92,246,0.1);color:#7c3aed">beta</span></div>
+                <div class="card" style="border-color:rgba(138,114,181,0.3);background:linear-gradient(135deg,rgba(138,114,181,0.05),var(--surface))">
+                    <div class="card-title" style="color:#8a72b5">✨ Importa Ricetta con AI <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">beta</span></div>
                     <div class="card-sub">Incolla il testo della ricetta o scattane una foto: l'AI crea la distinta base e la abbina ai prezzi del magazzino per il food cost.</div>
                     <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
                         <div class="field"><label>Nome piatto (opz.)</label><input type="text" id="ric-nome" placeholder="es. Orecchiette cime di rapa"></div>
@@ -695,13 +695,13 @@
                     </div>
                     <div class="field" style="margin-bottom:12px">
                         <label>Testo della ricetta</label>
-                        <textarea id="ric-testo" rows="4" placeholder="Incolla qui ingredienti e quantità…" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;line-height:1.5;resize:vertical"></textarea>
+                        <textarea id="ric-testo" rows="4" placeholder="Incolla qui ingredienti e quantità…" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Jost',sans-serif;font-size:13px;line-height:1.5;resize:vertical"></textarea>
                     </div>
                     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                        <button id="ric-btn-ai" onclick="analizzaRicettaTesto()" class="btn" style="background:#7c3aed;color:#fff;box-shadow:0 2px 10px rgba(124,58,237,0.3)">✨ Analizza testo</button>
-                        <label for="ric-foto-camera" class="btn" style="background:#fff;color:#7c3aed;border:1px solid #7c3aed;cursor:pointer">📷 Foto</label>
+                        <button id="ric-btn-ai" onclick="analizzaRicettaTesto()" class="btn" style="background:#8a72b5;color:#fff;box-shadow:0 2px 10px rgba(138,114,181,0.3)">✨ Analizza testo</button>
+                        <label for="ric-foto-camera" class="btn" style="background:#fff;color:#8a72b5;border:1px solid #8a72b5;cursor:pointer">📷 Foto</label>
                         <input type="file" id="ric-foto-camera" accept="image/*" capture="environment" style="display:none" onchange="analizzaRicettaFoto(this)">
-                        <label for="ric-foto-galleria" class="btn" style="background:#fff;color:#7c3aed;border:1px solid #7c3aed;cursor:pointer">🖼 Galleria</label>
+                        <label for="ric-foto-galleria" class="btn" style="background:#fff;color:#8a72b5;border:1px solid #8a72b5;cursor:pointer">🖼 Galleria</label>
                         <input type="file" id="ric-foto-galleria" accept="image/*" style="display:none" onchange="analizzaRicettaFoto(this)">
                         <span id="ric-status" style="font-size:12px;color:var(--text3);width:100%"></span>
                     </div>
@@ -726,8 +726,8 @@
             <!-- MENU & EVENTI -->
             <div id="sec-menu" class="hidden">
                 <!-- GENERATORE AI -->
-                <div class="card" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(135deg,rgba(139,92,246,0.05),var(--surface))">
-                    <div class="card-title" style="color:#7c3aed">✨ Genera Menu Evento con AI <span class="ctag" style="background:rgba(139,92,246,0.1);color:#7c3aed">beta</span></div>
+                <div class="card" style="border-color:rgba(138,114,181,0.3);background:linear-gradient(135deg,rgba(138,114,181,0.05),var(--surface))">
+                    <div class="card-title" style="color:#8a72b5">✨ Genera Menu Evento con AI <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">beta</span></div>
                     <div class="card-sub">Descrivi l'evento: l'AI compone il menu e calcola il food cost a coperto usando i prezzi del tuo magazzino.</div>
                     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
                         <div class="field"><label>Tipo / nome evento</label><input type="text" id="mg-nome" placeholder="es. Matrimonio Masseria"></div>
@@ -753,7 +753,7 @@
                         <div class="field" style="grid-column:1/-1"><label>Note / allergie / richieste</label><input type="text" id="mg-note" placeholder="es. niente maiale, 2 vegetariani, menu degustazione 5 portate"></div>
                     </div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px">
-                        <button id="mg-btn-ai" onclick="generaMenuAI()" class="btn" style="background:#7c3aed;color:#fff;box-shadow:0 2px 10px rgba(124,58,237,0.3)">✨ Genera Menu</button>
+                        <button id="mg-btn-ai" onclick="generaMenuAI()" class="btn" style="background:#8a72b5;color:#fff;box-shadow:0 2px 10px rgba(138,114,181,0.3)">✨ Genera Menu</button>
                         <button onclick="creaMenuVuoto()" class="btn btn-cancel">+ Crea menu vuoto</button>
                         <span id="mg-status" style="font-size:12px;color:var(--text3);width:100%"></span>
                     </div>
@@ -850,7 +850,7 @@
             🔒 Non viene mai inviata a nessun server esterno.
         </div>
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 2.3 — Preparazioni
+            🏷️ Versione 2.4 — Stile Bauhaus
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -1383,7 +1383,7 @@ function renderLocaleList() {
                 <div class="locale-card-meta">${l.ingredienti.length} ingredienti · ${l.piatti.length} piatti</div>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
-                <button onclick="event.stopPropagation();eliminaLocaleById('${l.id}')" style="background:none;border:1px solid rgba(220,38,38,0.25);border-radius:6px;color:var(--red);font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s" onmouseover="this.style.background='var(--rsoft)'" onmouseout="this.style.background='none'">Elimina</button>
+                <button onclick="event.stopPropagation();eliminaLocaleById('${l.id}')" style="background:none;border:1px solid rgba(220,38,38,0.25);border-radius:6px;color:var(--red);font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer;font-family:'Jost',sans-serif;transition:all .15s" onmouseover="this.style.background='var(--rsoft)'" onmouseout="this.style.background='none'">Elimina</button>
                 <span class="locale-card-arrow">→</span>
             </div>
         </div>
@@ -1872,7 +1872,7 @@ function renderRicettario() {
                     const peso = pesoPiatto(prep);
                     const costoG = peso > 0 ? cxp(prep) / peso : 0;
                     return `<tr>
-                        <td class="td-name">${esc(prep.nome)} <span class="ctag" style="background:rgba(124,58,237,0.1);color:#7c3aed">preparazione</span></td>
+                        <td class="td-name">${esc(prep.nome)} <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">preparazione</span></td>
                         <td class="td-m">${r.grammi} g</td>
                         <td class="td-m">€ ${(costoG*r.grammi).toFixed(3)}</td>
                         <td><button onclick="rimuoviPrep('${p.id}','${prep.id}')" class="btn-del" style="padding:4px 7px;font-size:12px">✕</button></td>
@@ -1920,13 +1920,13 @@ function renderRicettario() {
                     <div class="field fsm"><label>Grammi</label><input type="number" id="gr-${p.id}" min="1" placeholder="g"></div>
                     <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiIng('${p.id}','sel-${p.id}','gr-${p.id}')" class="btn btn-p">+ Aggiungi</button></div>
                 </div>
-                ${altriPiatti.length ? `<div class="add-row" style="border-style:solid;border-color:rgba(124,58,237,0.25);background:rgba(124,58,237,0.04)">
+                ${altriPiatti.length ? `<div class="add-row" style="border-style:solid;border-color:rgba(138,114,181,0.25);background:rgba(138,114,181,0.04)">
                     <div class="field" style="flex:1">
                         <label>Oppure aggiungi una preparazione (un'altra ricetta salvata)</label>
                         <select id="prep-sel-${p.id}">${prepOpts}</select>
                     </div>
                     <div class="field fsm"><label>Grammi</label><input type="number" id="prep-gr-${p.id}" min="1" placeholder="g"></div>
-                    <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiPrep('${p.id}','prep-sel-${p.id}','prep-gr-${p.id}')" class="btn" style="background:#7c3aed;color:#fff">+ Preparazione</button></div>
+                    <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiPrep('${p.id}','prep-sel-${p.id}','prep-gr-${p.id}')" class="btn" style="background:#8a72b5;color:#fff">+ Preparazione</button></div>
                 </div>` : ''}
             </div>
         </div>`;
