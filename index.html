@@ -894,7 +894,7 @@
         </div>
 
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 3.1 — Magazzino e preparazioni condivisi
+            🏷️ Versione 3.2 — Banchi a buffet
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -1887,7 +1887,15 @@ function costoVoce(v){
     return 0;
 }
 function costoPortata(po){ return (po.voci||[]).reduce((t,v) => t + costoVoce(v), 0); }
-function costoMenuCoperto(m){ return (m.portate||[]).reduce((t,po) => t + costoPortata(po), 0); }
+// Banchi / voci a forfait: incidenza per coperto (totale evento diviso i coperti, oppure già a coperto)
+function costoExtraCoperto(m){
+    const cop = m.coperti || 1;
+    return (m.extra||[]).reduce((t,e) => {
+        const imp = parseFloat(e.importo) || 0;
+        return t + (e.modo === 'coperto' ? imp : imp / cop);
+    }, 0);
+}
+function costoMenuCoperto(m){ return (m.portate||[]).reduce((t,po) => t + costoPortata(po), 0) + costoExtraCoperto(m); }
 
 // Una voce è "valorizzata" se ha un ingrediente a magazzino oppure un costo da preparazione
 function voceValorizzata(v){ return !!(v.ingId && ingById(v.ingId)) || (typeof v.costoG === 'number' && v.costoG > 0); }
@@ -2682,6 +2690,25 @@ function rimuoviPortata(menuId, poId){
     salva();
 }
 
+function aggiungiExtra(menuId){
+    const m = appDB.menu.find(x => x.id === menuId);
+    if(!m) return;
+    const nome = (document.getElementById('extra-nome-'+menuId).value || '').trim();
+    const importo = parseFloat(document.getElementById('extra-imp-'+menuId).value);
+    const modo = document.getElementById('extra-modo-'+menuId).value;
+    if(!nome || !importo || importo <= 0) return alert('Inserisci nome e costo del banco.');
+    if(!Array.isArray(m.extra)) m.extra = [];
+    m.extra.push({ id:'ex'+Date.now(), nome, importo, modo });
+    salva();
+}
+
+function rimuoviExtra(menuId, exId){
+    const m = appDB.menu.find(x => x.id === menuId);
+    if(!m) return;
+    m.extra = (m.extra||[]).filter(e => e.id !== exId);
+    salva();
+}
+
 function eliminaMenu(menuId){
     const m = appDB.menu.find(x => x.id === menuId);
     if(!m) return;
@@ -2764,9 +2791,7 @@ function renderMenu(){
         const costoTot = costoCop * cop;
         const margineTot = ricavoTot - costoTot;
 
-        const righePortate = !m.portate.length
-            ? `<tr><td colspan="4"><div class="empty" style="padding:18px"><div class="empty-txt">Nessuna portata. Aggiungi un piatto salvato qui sotto o rigenera.</div></div></td></tr>`
-            : m.portate.map(po => {
+        const rowsPortate = m.portate.map(po => {
                 const cP = costoPortata(po);
                 const manc = (po.voci||[]).filter(v => !voceValorizzata(v)).length;
                 return `<tr>
@@ -2776,6 +2801,20 @@ function renderMenu(){
                     <td><button onclick="rimuoviPortata('${m.id}','${po.id}')" class="btn-del" style="padding:4px 7px;font-size:12px" title="Rimuovi portata">✕</button></td>
                 </tr>`;
             }).join('');
+        const rowsExtra = (m.extra||[]).map(e => {
+                const imp = parseFloat(e.importo)||0;
+                const perCop = e.modo === 'coperto' ? imp : imp/cop;
+                const dett = e.modo === 'coperto' ? 'a coperto' : `€ ${imp.toFixed(0)} tot`;
+                return `<tr>
+                    <td class="td-muted" style="font-size:11px;white-space:nowrap">🍽 Banco</td>
+                    <td class="td-name">${esc(e.nome)} <span class="ctag" style="font-size:9px;background:var(--surface3);color:var(--text3)">${dett}</span></td>
+                    <td class="td-val">€ ${perCop.toFixed(3)}</td>
+                    <td><button onclick="rimuoviExtra('${m.id}','${e.id}')" class="btn-del" style="padding:4px 7px;font-size:12px" title="Rimuovi banco">✕</button></td>
+                </tr>`;
+            }).join('');
+        const righePortate = (m.portate.length || (m.extra||[]).length)
+            ? (rowsPortate + rowsExtra)
+            : `<tr><td colspan="4"><div class="empty" style="padding:18px"><div class="empty-txt">Nessuna portata. Aggiungi un piatto salvato o un banco a buffet qui sotto.</div></div></td></tr>`;
 
         const blkMancanti = mancanti.length ? `
             <div style="margin-top:12px;padding:12px;background:var(--ysoft);border:1px solid rgba(217,119,6,0.25);border-radius:var(--r2)">
@@ -2803,7 +2842,7 @@ function renderMenu(){
             </div>
             <div class="recipe-body">
                 <div class="stats-row" style="margin-bottom:14px">
-                    <div class="stat-pill"><div class="stat-pill-label">Costo MP / coperto</div><div class="stat-pill-val accent">€ ${costoCop.toFixed(2)}</div><div class="stat-pill-sub">${m.portate.length} portate</div></div>
+                    <div class="stat-pill"><div class="stat-pill-label">Costo MP / coperto</div><div class="stat-pill-val accent">€ ${costoCop.toFixed(2)}</div><div class="stat-pill-sub">${m.portate.length} portate · ${(m.extra||[]).length} banchi</div></div>
                     ${blkEconomia}
                 </div>
 
@@ -2831,6 +2870,16 @@ function renderMenu(){
                         <select id="addsel-${m.id}">${piattiOpts}</select>
                     </div>
                     <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiPiattoAMenu('${m.id}','addsel-${m.id}')" class="btn btn-g">+ Aggiungi</button></div>
+                </div>
+
+                <div class="add-row" style="margin-top:10px;border-style:solid;border-color:rgba(95,158,127,0.3);background:rgba(95,158,127,0.05)">
+                    <div class="field" style="flex:1">
+                        <label>Banco a buffet / voce a forfait</label>
+                        <input type="text" id="extra-nome-${m.id}" placeholder="es. Buffet latticini, Banco fornaio, Affettati, Aperitivi">
+                    </div>
+                    <div class="field fsm"><label>Costo €</label><input type="number" min="0" step="any" id="extra-imp-${m.id}" placeholder="200"></div>
+                    <div class="field fsm"><label>Tipo</label><select id="extra-modo-${m.id}"><option value="totale">Totale evento</option><option value="coperto">A coperto</option></select></div>
+                    <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiExtra('${m.id}')" class="btn" style="background:var(--green);color:#fff">+ Banco</button></div>
                 </div>
             </div>
         </div>`;
