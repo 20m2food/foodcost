@@ -894,7 +894,7 @@
         </div>
 
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 3.2 — Banchi a buffet
+            🏷️ Versione 3.3 — Eventi e banchi
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -2759,13 +2759,12 @@ function salvaMancante(){
 }
 
 function renderMenu(){
-    const L = db();
     const cnt = document.getElementById('cnt-menu');
-    if(cnt) cnt.textContent = L ? (L.menu||[]).length : 0;
+    if(cnt) cnt.textContent = (appDB.menu||[]).length;
     const c = document.getElementById('contenitore-menu');
-    if(!c || !L) return;
+    if(!c) return;
 
-    const menus = L.menu || [];
+    const menus = appDB.menu || [];
     if(!menus.length){
         c.innerHTML = `<div class="card"><div class="empty"><div class="empty-ico">🥂</div><div class="empty-txt">Nessun menu. Genera con l'AI o crea un menu vuoto qui sopra.</div></div></div>`;
         return;
