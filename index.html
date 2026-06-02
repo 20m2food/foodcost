@@ -632,18 +632,29 @@
                     <div class="card-title">Aggiungi Ingrediente <span class="ctag">nuovo</span></div>
                     <div class="card-sub">Inserisci prezzi IVA esclusa dalla fattura del fornitore</div>
                     <form id="form-ingrediente">
-                        <div class="form-grid fg5">
+                        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
                             <div class="field">
                                 <label>Nome Ingrediente</label>
-                                <input type="text" id="ing-nome" required placeholder="es. Prosciutto di Parma DOP">
+                                <input type="text" id="ing-nome" required placeholder="es. Tartelletta salata">
                             </div>
                             <div class="field">
-                                <label>Prezzo Lordo €/Kg</label>
+                                <label>Unità</label>
+                                <select id="ing-unita" onchange="toggleUnitaForm()">
+                                    <option value="g">A peso (kg/g)</option>
+                                    <option value="pz">A pezzo (confezione)</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label id="lbl-ing-prezzo">Prezzo Lordo €/Kg</label>
                                 <input type="number" id="ing-prezzo" step="0.01" min="0" required placeholder="24.00">
                             </div>
-                            <div class="field">
+                            <div class="field" id="wrap-ing-resa">
                                 <label>Resa Netta %</label>
-                                <input type="number" id="ing-resa" step="1" min="1" max="100" value="100" required>
+                                <input type="number" id="ing-resa" step="1" min="1" max="100" value="100">
+                            </div>
+                            <div class="field" id="wrap-ing-pezzi" style="display:none">
+                                <label>Pezzi per Confezione</label>
+                                <input type="number" id="ing-pezzi" step="1" min="1" placeholder="es. 50">
                             </div>
                             <div class="field">
                                 <label>Fornitore</label>
@@ -850,7 +861,7 @@
             🔒 Non viene mai inviata a nessun server esterno.
         </div>
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 2.4 — Stile Bauhaus
+            🏷️ Versione 2.8 — Scanner a pezzo
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -883,12 +894,23 @@
                 <input type="text" id="mod-nome" placeholder="Nome">
             </div>
             <div class="field">
-                <label>Prezzo Lordo €/Kg</label>
-                <input type="number" id="mod-prezzo" step="0.01" min="0" placeholder="0.00">
+                <label>Unità</label>
+                <select id="mod-unita" onchange="toggleUnitaMod()">
+                    <option value="g">A peso (kg/g)</option>
+                    <option value="pz">A pezzo (confezione)</option>
+                </select>
             </div>
             <div class="field">
+                <label id="lbl-mod-prezzo">Prezzo Lordo €/Kg</label>
+                <input type="number" id="mod-prezzo" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="field" id="wrap-mod-resa">
                 <label>Resa Netta %</label>
                 <input type="number" id="mod-resa" step="1" min="1" max="100" placeholder="100">
+            </div>
+            <div class="field" id="wrap-mod-pezzi" style="display:none">
+                <label>Pezzi per Confezione</label>
+                <input type="number" id="mod-pezzi" step="1" min="1" placeholder="es. 50">
             </div>
             <div class="field">
                 <label>Fornitore</label>
@@ -986,6 +1008,7 @@ let appDB = caricaDB();
         if (!Array.isArray(l.ingredienti)) l.ingredienti = [];
         if (!Array.isArray(l.piatti))      l.piatti = [];
         if (!Array.isArray(l.menu))        l.menu = [];
+        l.ingredienti.forEach(i => { if (!i.unita) i.unita = 'g'; });
     });
 })();
 
@@ -1117,15 +1140,19 @@ Rispondi SOLO con un JSON valido, senza testo aggiuntivo né markdown, nel forma
   "ingredienti": [
     {
       "nome": "nome prodotto",
+      "unita": "kg",
       "prezzoKg": 0.00,
-      "unitaMisura": "kg o lt o pz",
+      "prezzoConf": 0.00,
+      "pezziConf": 0,
       "note": "descrizione aggiuntiva se utile"
     }
   ]
 }
 Note importanti:
-- Usa il prezzo IVA esclusa (imponibile)
-- Se il prezzo è per confezione/unità, prova a calcolare il prezzo al kg dividendo per il peso. Altrimenti usa il prezzo unitario e nelle note specifica "prezzo a pezzo" o "prezzo a confezione di Xkg".
+- Usa sempre il prezzo IVA esclusa (imponibile).
+- Campo "unita": metti "pz" se l'articolo si vende/conta A PEZZO o A CONFEZIONE con un numero di pezzi dentro (es. tartellette, basi/cialde, vol-au-vent, uova in cartone, ostriche, vaschette da N pezzi). Metti "kg" per tutto ciò che si vende a PESO o a volume (carne, pesce, formaggi, verdure, farine, salse al kg o al litro).
+- Se "unita"="kg": compila "prezzoKg" = prezzo al kg imponibile (se è in confezione da X kg, dividi il prezzo per i kg). Lascia prezzoConf e pezziConf a 0.
+- Se "unita"="pz": compila "prezzoConf" = prezzo dell'intera confezione/cartone imponibile, e "pezziConf" = quanti pezzi contiene. Se vedi solo il prezzo del singolo pezzo, metti prezzoConf = quel prezzo e pezziConf = 1. Lascia prezzoKg a 0.
 - Includi solo prodotti alimentari, escludi spese di spedizione, IVA, sconti generici.
 - Se non riesci a leggere la fattura, restituisci {"fornitore":"","ingredienti":[]}.`
                             }
@@ -1194,13 +1221,23 @@ function mostraImport(fornitore, ingredienti) {
     _importCandidates = ingredienti;
     const lista = document.getElementById('import-lista');
 
-    lista.innerHTML = ingredienti.map((ing, idx) => `
+    lista.innerHTML = ingredienti.map((ing, idx) => {
+        const isPz = ing.unita === 'pz';
+        const pConf = (ing.prezzoConf != null && ing.prezzoConf > 0) ? ing.prezzoConf : 0;
+        return `
         <div style="border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:10px;background:var(--surface2)">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                 <input type="checkbox" id="imp-check-${idx}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
                 <label for="imp-check-${idx}" style="font-weight:600;font-size:14px;cursor:pointer;color:var(--text)">${esc(ing.nome)}</label>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="field" style="margin-bottom:8px">
+                <label>Unità</label>
+                <select id="imp-unita-${idx}" onchange="toggleImportUnita(${idx})">
+                    <option value="g" ${!isPz?'selected':''}>A peso (kg/g)</option>
+                    <option value="pz" ${isPz?'selected':''}>A pezzo (confezione)</option>
+                </select>
+            </div>
+            <div id="imp-wrap-peso-${idx}" style="display:${isPz?'none':'grid'};grid-template-columns:1fr 1fr;gap:8px">
                 <div class="field">
                     <label>Prezzo €/Kg</label>
                     <input type="number" id="imp-prezzo-${idx}" value="${(ing.prezzoKg||0).toFixed(2)}" step="0.01" min="0">
@@ -1209,16 +1246,32 @@ function mostraImport(fornitore, ingredienti) {
                     <label>Resa %</label>
                     <input type="number" id="imp-resa-${idx}" value="100" step="1" min="1" max="100">
                 </div>
-                <div class="field" style="grid-column:1/-1">
-                    <label>Fornitore</label>
-                    <input type="text" id="imp-forn-${idx}" value="${esc(fornitore)}">
+            </div>
+            <div id="imp-wrap-pezzo-${idx}" style="display:${isPz?'grid':'none'};grid-template-columns:1fr 1fr;gap:8px">
+                <div class="field">
+                    <label>Prezzo Confezione €</label>
+                    <input type="number" id="imp-prezzoconf-${idx}" value="${pConf.toFixed(2)}" step="0.01" min="0">
+                </div>
+                <div class="field">
+                    <label>Pezzi per Confezione</label>
+                    <input type="number" id="imp-pezzi-${idx}" value="${ing.pezziConf||1}" step="1" min="1">
                 </div>
             </div>
+            <div class="field" style="margin-top:8px">
+                <label>Fornitore</label>
+                <input type="text" id="imp-forn-${idx}" value="${esc(fornitore)}">
+            </div>
             ${ing.note ? `<div style="font-size:11px;color:var(--text3);margin-top:6px">ℹ️ ${esc(ing.note)}</div>` : ''}
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 
     document.getElementById('modal-import-overlay').classList.remove('hidden');
+}
+
+function toggleImportUnita(idx) {
+    const pz = document.getElementById('imp-unita-' + idx).value === 'pz';
+    document.getElementById('imp-wrap-peso-' + idx).style.display  = pz ? 'none' : 'grid';
+    document.getElementById('imp-wrap-pezzo-' + idx).style.display = pz ? 'grid' : 'none';
 }
 
 function chiudiImport() {
@@ -1231,25 +1284,40 @@ function confermaImport() {
     _importCandidates.forEach((ing, idx) => {
         const checked = document.getElementById(`imp-check-${idx}`)?.checked;
         if (!checked) return;
-        const prezzo = parseFloat(document.getElementById(`imp-prezzo-${idx}`)?.value) || 0;
-        const resa   = parseFloat(document.getElementById(`imp-resa-${idx}`)?.value) || 100;
-        const forn   = document.getElementById(`imp-forn-${idx}`)?.value.trim() || '—';
-        if (!ing.nome || prezzo <= 0) return;
+        if (!ing.nome) return;
+        const unita = document.getElementById(`imp-unita-${idx}`)?.value || 'g';
+        const forn  = document.getElementById(`imp-forn-${idx}`)?.value.trim() || '—';
+
+        let prezzo, resa, pezziConf = null;
+        if (unita === 'pz') {
+            prezzo = parseFloat(document.getElementById(`imp-prezzoconf-${idx}`)?.value) || 0;
+            pezziConf = parseInt(document.getElementById(`imp-pezzi-${idx}`)?.value) || 1;
+            resa = 100;
+        } else {
+            prezzo = parseFloat(document.getElementById(`imp-prezzo-${idx}`)?.value) || 0;
+            resa   = parseFloat(document.getElementById(`imp-resa-${idx}`)?.value) || 100;
+        }
+        if (prezzo <= 0) return;
+
         // Controlla se esiste già (per nome simile)
         const esiste = db().ingredienti.find(i => i.nome.toLowerCase() === ing.nome.toLowerCase());
         if (esiste) {
-            // Aggiorna prezzo e resa
             esiste.prezzoLordo = prezzo;
             esiste.resa = resa;
             esiste.fornitore = forn;
+            esiste.unita = unita;
+            if (unita === 'pz') esiste.pezziConf = pezziConf; else delete esiste.pezziConf;
         } else {
-            db().ingredienti.push({
+            const nuovo = {
                 id: 'i' + Date.now() + idx,
                 nome: ing.nome,
                 prezzoLordo: prezzo,
                 resa: resa,
-                fornitore: forn
-            });
+                fornitore: forn,
+                unita: unita
+            };
+            if (unita === 'pz') nuovo.pezziConf = pezziConf;
+            db().ingredienti.push(nuovo);
         }
         importati++;
     });
@@ -1442,7 +1510,16 @@ function switchTab(name) {
 // MATEMATICA
 // ═══════════════════════════════════════════
 
-function cxg(ing) { return (ing.prezzoLordo / (ing.resa / 100)) / 1000; }
+// Costo per unità base: €/grammo per gli articoli a peso, €/pezzo per quelli a pezzo
+function cxg(ing) {
+    const resa = (ing.resa ? ing.resa / 100 : 1) || 1;
+    if (ing.unita === 'pz') {
+        const pezzi = ing.pezziConf || 1;
+        return (ing.prezzoLordo / pezzi) / resa;   // €/pezzo
+    }
+    return (ing.prezzoLordo / resa) / 1000;         // €/grammo
+}
+function unitaLabel(ing) { return ing && ing.unita === 'pz' ? 'pz' : 'g'; }
 
 // Peso totale di una scheda (somma dei grammi di ingredienti + preparazioni)
 function pesoPiatto(p) {
@@ -1505,18 +1582,39 @@ function abbinaIngrediente(nome){
 }
 
 function costoVoce(v){
-    if(!v.ingId) return 0;
-    const ing = ingById(v.ingId);
-    return ing ? cxg(ing) * v.grammi : 0;
+    if(v.ingId){ const ing = ingById(v.ingId); return ing ? cxg(ing) * v.grammi : 0; }
+    if(typeof v.costoG === 'number') return v.costoG * v.grammi;  // preparazione: costo già calcolato per grammo
+    return 0;
 }
 function costoPortata(po){ return (po.voci||[]).reduce((t,v) => t + costoVoce(v), 0); }
 function costoMenuCoperto(m){ return (m.portate||[]).reduce((t,po) => t + costoPortata(po), 0); }
 
-// Nomi degli ingredienti non presenti a magazzino (non conteggiati)
+// Una voce è "valorizzata" se ha un ingrediente a magazzino oppure un costo da preparazione
+function voceValorizzata(v){ return !!(v.ingId && ingById(v.ingId)) || (typeof v.costoG === 'number' && v.costoG > 0); }
+
+// Costo per grammo di una preparazione, calcolato nei prezzi di uno specifico locale (gestisce annidamenti)
+function costoGrammoPrepInLocale(loc, prepId, _seen){
+    _seen = _seen || [];
+    const prep = (loc.piatti||[]).find(x => x.id === prepId);
+    if(!prep || _seen.includes(prepId)) return 0;
+    const seen2 = _seen.concat(prepId);
+    const peso = (prep.ricetta||[]).reduce((t,r) => t + (parseFloat(r.grammi)||0), 0);
+    if(peso <= 0) return 0;
+    const costoTot = (prep.ricetta||[]).reduce((t,r) => {
+        if(r.prepId) return t + costoGrammoPrepInLocale(loc, r.prepId, seen2) * (parseFloat(r.grammi)||0);
+        const ing = (loc.ingredienti||[]).find(x => x.id === r.ingId);
+        if(!ing) return t;
+        const cg = cxg(ing);
+        return t + cg * (parseFloat(r.grammi)||0);
+    }, 0);
+    return costoTot / peso;
+}
+
+// Nomi degli ingredienti non valorizzati (non conteggiati nel food cost)
 function vociMancanti(m){
     const o = [];
     (m.portate||[]).forEach(po => (po.voci||[]).forEach(v => {
-        if(!v.ingId || !ingById(v.ingId)) o.push(v.nome);
+        if(!voceValorizzata(v)) o.push(v.nome);
     }));
     return [...new Set(o)];
 }
@@ -1524,7 +1622,7 @@ function vociMancanti(m){
 // Ri-abbina le voci dei menu quando si aggiunge un ingrediente al magazzino
 function riabbinaMenu(){
     (db().menu||[]).forEach(m => (m.portate||[]).forEach(po => (po.voci||[]).forEach(v => {
-        if(!v.ingId){ const id = abbinaIngrediente(v.nome); if(id) v.ingId = id; }
+        if(!v.ingId && !(typeof v.costoG === 'number' && v.costoG > 0)){ const id = abbinaIngrediente(v.nome); if(id) v.ingId = id; }
     })));
 }
 
@@ -1532,21 +1630,41 @@ function riabbinaMenu(){
 // MAGAZZINO
 // ═══════════════════════════════════════════
 
+function toggleUnitaForm(){
+    const pz = document.getElementById('ing-unita').value === 'pz';
+    document.getElementById('wrap-ing-resa').style.display  = pz ? 'none' : '';
+    document.getElementById('wrap-ing-pezzi').style.display = pz ? '' : 'none';
+    document.getElementById('lbl-ing-prezzo').textContent = pz ? 'Prezzo Confezione €' : 'Prezzo Lordo €/Kg';
+}
+
 document.getElementById('form-ingrediente').addEventListener('submit', function(e) {
     e.preventDefault();
-    db().ingredienti.push({
+    const unita = document.getElementById('ing-unita').value;
+    const ing = {
         id: 'i' + Date.now(),
         nome: document.getElementById('ing-nome').value.trim(),
         prezzoLordo: parseFloat(document.getElementById('ing-prezzo').value),
-        resa: parseFloat(document.getElementById('ing-resa').value),
-        fornitore: document.getElementById('ing-fornitore').value.trim() || '—'
-    });
+        resa: parseFloat(document.getElementById('ing-resa').value) || 100,
+        fornitore: document.getElementById('ing-fornitore').value.trim() || '—',
+        unita: unita
+    };
+    if (unita === 'pz') { ing.pezziConf = parseInt(document.getElementById('ing-pezzi').value) || 1; ing.resa = 100; }
+    db().ingredienti.push(ing);
     this.reset();
     document.getElementById('ing-resa').value = 100;
+    document.getElementById('ing-unita').value = 'g';
+    toggleUnitaForm();
     salva();
 });
 
 let _modIngId = null;
+
+function toggleUnitaMod(){
+    const pz = document.getElementById('mod-unita').value === 'pz';
+    document.getElementById('wrap-mod-resa').style.display  = pz ? 'none' : '';
+    document.getElementById('wrap-mod-pezzi').style.display = pz ? '' : 'none';
+    document.getElementById('lbl-mod-prezzo').textContent = pz ? 'Prezzo Confezione €' : 'Prezzo Lordo €/Kg';
+}
 
 function apriModificaIngrediente(id) {
     const i = db().ingredienti.find(x => x.id === id);
@@ -1557,6 +1675,9 @@ function apriModificaIngrediente(id) {
     document.getElementById('mod-prezzo').value   = i.prezzoLordo;
     document.getElementById('mod-resa').value     = i.resa;
     document.getElementById('mod-fornitore').value = i.fornitore || '';
+    document.getElementById('mod-unita').value    = i.unita === 'pz' ? 'pz' : 'g';
+    document.getElementById('mod-pezzi').value    = i.pezziConf || '';
+    toggleUnitaMod();
     document.getElementById('modal-modifica-overlay').classList.remove('hidden');
 }
 
@@ -1571,13 +1692,20 @@ function salvaModificaIngrediente() {
     if (!i) return;
     const nome    = document.getElementById('mod-nome').value.trim();
     const prezzo  = parseFloat(document.getElementById('mod-prezzo').value);
-    const resa    = parseFloat(document.getElementById('mod-resa').value);
+    const unita   = document.getElementById('mod-unita').value;
     const forn    = document.getElementById('mod-fornitore').value.trim();
-    if (!nome || isNaN(prezzo) || isNaN(resa)) return alert('Compila tutti i campi obbligatori.');
+    if (!nome || isNaN(prezzo)) return alert('Compila nome e prezzo.');
     i.nome        = nome;
     i.prezzoLordo = prezzo;
-    i.resa        = resa;
     i.fornitore   = forn || '—';
+    i.unita       = unita;
+    if (unita === 'pz') {
+        i.pezziConf = parseInt(document.getElementById('mod-pezzi').value) || 1;
+        i.resa = 100;
+    } else {
+        i.resa = parseFloat(document.getElementById('mod-resa').value) || 100;
+        delete i.pezziConf;
+    }
     chiudiModificaIngrediente();
     salva();
 }
@@ -1618,14 +1746,28 @@ function renderMagazzino() {
         return;
     }
     tb.innerHTML = lista.map(i => {
-        const cn = i.prezzoLordo / (i.resa / 100);
+        const isPz = i.unita === 'pz';
+        const costoUnit = cxg(i); // €/g (peso) oppure €/pezzo (pezzo)
+        let cPrezzo, cResa, cNetto, cUnit;
+        if (isPz) {
+            cPrezzo = `€ ${i.prezzoLordo.toFixed(2)} <span style="color:var(--text3);font-size:10px">/conf</span>`;
+            cResa   = `<span style="color:var(--text3)">${i.pezziConf || 1} pz</span>`;
+            cNetto  = `<span style="color:var(--text3)">—</span>`;
+            cUnit   = `€ ${costoUnit.toFixed(3)} <span style="font-size:9px">/pz</span>`;
+        } else {
+            const cn = i.prezzoLordo / ((i.resa || 100) / 100);
+            cPrezzo = `€ ${i.prezzoLordo.toFixed(2)}`;
+            cResa   = i.resa < 100 ? `<span style="color:var(--yellow);font-weight:600">${i.resa}%</span>` : `<span style="color:var(--text3)">${i.resa}%</span>`;
+            cNetto  = `€ ${cn.toFixed(2)}`;
+            cUnit   = `€ ${costoUnit.toFixed(4)} <span style="font-size:9px">/g</span>`;
+        }
         return `<tr>
-            <td class="td-name">${esc(i.nome)}</td>
+            <td class="td-name">${esc(i.nome)}${isPz ? ` <span class="ctag" style="background:var(--osoft);color:var(--orange)">pz</span>` : ''}</td>
             <td class="td-muted">${esc(i.fornitore || '—')}</td>
-            <td class="td-m">€ ${i.prezzoLordo.toFixed(2)}</td>
-            <td>${i.resa < 100 ? `<span style="color:var(--yellow);font-weight:600">${i.resa}%</span>` : `<span style="color:var(--text3)">${i.resa}%</span>`}</td>
-            <td class="td-val">€ ${cn.toFixed(2)}</td>
-            <td class="td-m" style="color:var(--text3);font-size:11px">€ ${(cn/1000).toFixed(4)}</td>
+            <td class="td-m">${cPrezzo}</td>
+            <td>${cResa}</td>
+            <td class="td-val">${cNetto}</td>
+            <td class="td-m" style="color:var(--text3);font-size:11px">${cUnit}</td>
             <td style="display:flex;gap:6px">
                 <button onclick="apriModificaIngrediente('${i.id}')" class="btn-del" style="color:var(--accent);border-color:var(--aborder)" title="Modifica">✏️</button>
                 <button onclick="eliminaIngrediente('${i.id}')" class="btn-del" title="Elimina">✕</button>
@@ -1854,7 +1996,7 @@ function renderRicettario() {
     }
     const ingOrdinati = [...db().ingredienti].sort((a,b) => a.nome.localeCompare(b.nome, 'it'));
     const opts = '<option value="">— Seleziona ingrediente —</option>'
-        + ingOrdinati.map(i => `<option value="${i.id}">${esc(i.nome)}</option>`).join('');
+        + ingOrdinati.map(i => `<option value="${i.id}">${esc(i.nome)}${i.unita==='pz'?' (pz)':''}</option>`).join('');
 
     c.innerHTML = db().piatti.map(p => {
         const costo = cxp(p);
@@ -1882,7 +2024,7 @@ function renderRicettario() {
                 if (!i) return '';
                 return `<tr>
                     <td class="td-name">${esc(i.nome)}</td>
-                    <td class="td-m">${r.grammi} g</td>
+                    <td class="td-m">${r.grammi} ${unitaLabel(i)}</td>
                     <td class="td-m">€ ${(cxg(i)*r.grammi).toFixed(3)}</td>
                     <td><button onclick="rimuoviIng('${p.id}','${i.id}')" class="btn-del" style="padding:4px 7px;font-size:12px">✕</button></td>
                 </tr>`;
@@ -1917,7 +2059,7 @@ function renderRicettario() {
                         <datalist id="dl-${p.id}">${ingOrdinati.map(i=>`<option value="${esc(i.nome)}" data-id="${i.id}">`).join('')}</datalist>
                         <select id="sel-${p.id}" style="margin-top:6px">${opts}</select>
                     </div>
-                    <div class="field fsm"><label>Grammi</label><input type="number" id="gr-${p.id}" min="1" placeholder="g"></div>
+                    <div class="field fsm"><label>Qtà</label><input type="number" id="gr-${p.id}" min="0" step="any" placeholder="g / pz"></div>
                     <div class="field fbtn"><label>&nbsp;</label><button onclick="aggiungiIng('${p.id}','sel-${p.id}','gr-${p.id}')" class="btn btn-p">+ Aggiungi</button></div>
                 </div>
                 ${altriPiatti.length ? `<div class="add-row" style="border-style:solid;border-color:rgba(138,114,181,0.25);background:rgba(138,114,181,0.04)">
@@ -2139,19 +2281,30 @@ Regole:
 }
 
 function aggiungiPiattoAMenu(menuId, selId){
-    const piattoId = document.getElementById(selId).value;
-    if(!piattoId) return;
+    const val = document.getElementById(selId).value;
+    if(!val) return;
+    const sep = val.indexOf('|');
+    const locId = sep >= 0 ? val.slice(0, sep) : appDB.localeAttivoId;
+    const piattoId = sep >= 0 ? val.slice(sep + 1) : val;
     const m = db().menu.find(x => x.id === menuId);
-    const p = db().piatti.find(x => x.id === piattoId);
+    const srcLoc = appDB.locali.find(l => l.id === locId);
+    const p = srcLoc ? (srcLoc.piatti||[]).find(x => x.id === piattoId) : null;
     if(!m || !p) return;
+    const stessoLocale = locId === appDB.localeAttivoId;
     m.portate.push({
         id: 'po' + Date.now(),
         categoria: 'Piatto',
         nome: p.nome,
         voci: (p.ricetta || []).map(r => {
-            if (r.prepId) { const prep = db().piatti.find(x => x.id === r.prepId); return { nome: prep ? prep.nome : 'preparazione', grammi: r.grammi, ingId: null }; }
-            const ing = ingById(r.ingId);
-            return { nome: ing ? ing.nome : '(ingrediente)', grammi: r.grammi, ingId: r.ingId };
+            if (r.prepId) {
+                const prep = (srcLoc.piatti||[]).find(x => x.id === r.prepId);
+                return { nome: prep ? prep.nome : 'preparazione', grammi: r.grammi, ingId: null, costoG: costoGrammoPrepInLocale(srcLoc, r.prepId) };
+            }
+            const ing = (srcLoc.ingredienti||[]).find(x => x.id === r.ingId);
+            const nome = ing ? ing.nome : '(ingrediente)';
+            // Stesso locale: uso l'id esatto. Altro locale: abbino per nome al magazzino attivo.
+            const ingId = stessoLocale ? r.ingId : abbinaIngrediente(nome);
+            return { nome, grammi: r.grammi, ingId };
         })
     });
     salva();
@@ -2226,8 +2379,13 @@ function renderMenu(){
         return;
     }
 
-    const piattiOpts = '<option value="">+ Da Distinta Base…</option>' +
-        [...L.piatti].sort((a,b) => a.nome.localeCompare(b.nome,'it')).map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+    const piattiOpts = '<option value="">+ Aggiungi piatto…</option>' +
+        appDB.locali.map(loc => {
+            const ps = [...(loc.piatti||[])].sort((a,b) => a.nome.localeCompare(b.nome,'it'));
+            if(!ps.length) return '';
+            const label = loc.id === appDB.localeAttivoId ? loc.nome + ' (attivo)' : loc.nome;
+            return `<optgroup label="${esc(label)}">` + ps.map(p => `<option value="${loc.id}|${p.id}">${esc(p.nome)}</option>`).join('') + `</optgroup>`;
+        }).join('');
 
     window._mancantiFlat = []; // lista piatta dei nomi mancanti, indicizzata per i bottoni
 
@@ -2245,7 +2403,7 @@ function renderMenu(){
             ? `<tr><td colspan="4"><div class="empty" style="padding:18px"><div class="empty-txt">Nessuna portata. Aggiungi un piatto salvato qui sotto o rigenera.</div></div></td></tr>`
             : m.portate.map(po => {
                 const cP = costoPortata(po);
-                const manc = (po.voci||[]).filter(v => !v.ingId || !ingById(v.ingId)).length;
+                const manc = (po.voci||[]).filter(v => !voceValorizzata(v)).length;
                 return `<tr>
                     <td class="td-muted" style="font-size:11px;white-space:nowrap">${esc(po.categoria||'')}</td>
                     <td class="td-name">${esc(po.nome)}${manc ? ` <span class="badge yellow" style="font-size:10px">⚠ ${manc}</span>` : ''}</td>
