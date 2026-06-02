@@ -861,6 +861,8 @@
             🔒 Non viene mai inviata a nessun server esterno.
         </div>
 
+        <div id="sb-sync-section" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)"></div>
+
         <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
             <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">💾 Backup dati</div>
             <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:10px">
@@ -874,7 +876,7 @@
         </div>
 
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 2.9 — Backup dati
+            🏷️ Versione 3.0 — Sync team
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -1060,6 +1062,10 @@ let _importCandidates = [];
 const MODELLO_OCR  = 'claude-haiku-4-5-20251001';  // scansione fatture (economico, ottimo per OCR)
 const MODELLO_MENU = 'claude-sonnet-4-6';           // generazione menu (più creativo). Fallback: 'claude-haiku-4-5-20251001'
 
+// ── Sincronizzazione cloud (Supabase) ──
+const SB_URL = 'https://anqdtmulilzdbzafhomu.supabase.co';
+const SB_KEY = 'sb_publishable_PPYya7JxvmVPtOi6QfYtVg_vNxOcrWr';
+
 // Prepara qualsiasi immagine (incluso HEIC dell'iPhone) per l'API:
 // la decodifica, la ridimensiona a max 1568px sul lato lungo e la riconverte in JPEG.
 // Risolve sia il formato HEIC non accettato sia le foto troppo pesanti.
@@ -1213,6 +1219,7 @@ Note importanti:
 function apriSettings() {
     const key = localStorage.getItem('anthropicApiKey') || '';
     document.getElementById('settings-api-key').value = key;
+    sbRenderSyncSection();
     document.getElementById('modal-settings-overlay').classList.remove('hidden');
 }
 
@@ -1273,6 +1280,191 @@ function importaBackup(input) {
     };
     reader.onerror = function() { alert('❌ Errore di lettura del file.'); input.value = ''; };
     reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════
+// SINCRONIZZAZIONE CLOUD (Supabase)
+// ═══════════════════════════════════════════
+
+function sbSession(){ try { return JSON.parse(localStorage.getItem('sbSession') || 'null'); } catch { return null; } }
+function sbSetSession(s){ if (s) localStorage.setItem('sbSession', JSON.stringify(s)); else localStorage.removeItem('sbSession'); }
+function sbLoggedIn(){ const s = sbSession(); return !!(s && s.access_token); }
+
+function sbHeaders(auth){
+    const h = { 'apikey': SB_KEY, 'Content-Type': 'application/json' };
+    if (auth) { const s = sbSession(); if (s && s.access_token) h['Authorization'] = 'Bearer ' + s.access_token; }
+    return h;
+}
+
+async function sbLogin(email, password){
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST', headers: sbHeaders(false), body: JSON.stringify({ email, password })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error_description || d.msg || d.error || 'Accesso non riuscito');
+    sbSetSession({
+        access_token: d.access_token,
+        refresh_token: d.refresh_token,
+        expires_at: Date.now() + ((d.expires_in || 3600) * 1000),
+        user_id: d.user && d.user.id,
+        email: (d.user && d.user.email) || email
+    });
+    return d;
+}
+
+async function sbRefresh(){
+    const s = sbSession();
+    if (!s || !s.refresh_token) throw new Error('Sessione assente');
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST', headers: sbHeaders(false), body: JSON.stringify({ refresh_token: s.refresh_token })
+    });
+    const d = await r.json();
+    if (!r.ok) { sbSetSession(null); throw new Error('Sessione scaduta, rifai il login'); }
+    sbSetSession({
+        access_token: d.access_token,
+        refresh_token: d.refresh_token,
+        expires_at: Date.now() + ((d.expires_in || 3600) * 1000),
+        user_id: (d.user && d.user.id) || s.user_id,
+        email: (d.user && d.user.email) || s.email
+    });
+    return d;
+}
+
+async function sbEnsureToken(){
+    const s = sbSession();
+    if (!s) throw new Error('Non connesso');
+    if (Date.now() > (s.expires_at || 0) - 60000) await sbRefresh();
+}
+
+async function sbPull(){
+    await sbEnsureToken();
+    const s = sbSession();
+    const r = await fetch(`${SB_URL}/rest/v1/foodcost_data?user_id=eq.${s.user_id}&select=data,updated_at`, { headers: sbHeaders(true) });
+    if (!r.ok) throw new Error('Lettura dal cloud non riuscita');
+    const rows = await r.json();
+    return rows.length ? rows[0] : null;
+}
+
+async function sbPush(){
+    await sbEnsureToken();
+    const s = sbSession();
+    const stamp = new Date().toISOString();
+    const payload = { db: appDB, anthropicApiKey: localStorage.getItem('anthropicApiKey') || '', v: 1 };
+    const body = [{ user_id: s.user_id, data: payload, updated_at: stamp }];
+    const r = await fetch(`${SB_URL}/rest/v1/foodcost_data`, {
+        method: 'POST',
+        headers: Object.assign(sbHeaders(true), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+        body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('Salvataggio sul cloud non riuscito');
+    localStorage.setItem('sbCloudStamp', stamp);
+    localStorage.setItem('sbLastSync', stamp);
+}
+
+function sbApplyPayload(payload, stamp){
+    if (!payload) return;
+    const incoming = payload.db || payload;
+    if (!incoming || !Array.isArray(incoming.locali)) return;
+    appDB = incoming;
+    if (!appDB.localeAttivoId && appDB.locali.length) appDB.localeAttivoId = appDB.locali[0].id;
+    appDB.locali.forEach(l => {
+        if (!Array.isArray(l.ingredienti)) l.ingredienti = [];
+        if (!Array.isArray(l.piatti)) l.piatti = [];
+        if (!Array.isArray(l.menu)) l.menu = [];
+        l.ingredienti.forEach(i => { if (!i.unita) i.unita = 'g'; });
+    });
+    if (typeof payload.anthropicApiKey === 'string' && payload.anthropicApiKey) {
+        localStorage.setItem('anthropicApiKey', payload.anthropicApiKey);
+    }
+    if (stamp) { localStorage.setItem('sbCloudStamp', stamp); localStorage.setItem('sbLastSync', stamp); }
+    salvaDB();
+}
+
+let _sbPushTimer = null;
+function sbScheduleSync(){
+    if (!sbLoggedIn()) return;
+    if (_sbPushTimer) clearTimeout(_sbPushTimer);
+    _sbPushTimer = setTimeout(() => {
+        sbPush().then(() => sbUpdateSyncUI('ok')).catch(() => sbUpdateSyncUI('err'));
+    }, 1500);
+}
+
+function sbUpdateSyncUI(state){
+    const st = document.getElementById('sb-sync-status');
+    if (!st) return;
+    const ora = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    if (state === 'ok')  { st.textContent = '✅ Sincronizzato alle ' + ora; st.style.color = 'var(--green)'; }
+    else if (state === 'err') { st.textContent = '⚠️ Sync non riuscito (riprovo al prossimo salvataggio)'; st.style.color = 'var(--red)'; }
+    else if (state === 'sync') { st.textContent = 'Sincronizzo…'; st.style.color = 'var(--accent)'; }
+}
+
+async function sbDoLogin(){
+    const email = document.getElementById('sb-email').value.trim();
+    const pass  = document.getElementById('sb-pass').value;
+    if (!email || !pass) return alert('Inserisci email e password del team.');
+    const btn = document.getElementById('sb-login-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Accesso in corso…'; }
+    try {
+        await sbLogin(email, pass);
+        const cloud = await sbPull();
+        if (cloud && cloud.data) {
+            const haDatiLocali = (appDB.locali || []).some(l => (l.ingredienti || []).length || (l.piatti || []).length);
+            let scarica = true;
+            if (haDatiLocali) {
+                scarica = confirm('Sul cloud ci sono già dei dati del team.\n\nOK = scarico i dati del team su questo dispositivo (sostituiscono quelli locali).\nAnnulla = carico invece i dati di QUESTO dispositivo sul cloud (sovrascrivono quelli del team).');
+            }
+            if (scarica) sbApplyPayload(cloud.data, cloud.updated_at);
+            else await sbPush();
+        } else {
+            await sbPush(); // cloud vuoto: questo dispositivo diventa la base del team
+        }
+        alert('✅ Connesso! I dati sono sincronizzati. L\'app si ricarica.');
+        location.reload();
+    } catch (e) {
+        alert('❌ ' + (e.message || e));
+        if (btn) { btn.disabled = false; btn.textContent = 'Accedi'; }
+    }
+}
+
+function sbLogout(){
+    if (!confirm('Uscire dalla sincronizzazione su questo dispositivo? I dati restano salvati in locale.')) return;
+    try { fetch(`${SB_URL}/auth/v1/logout`, { method: 'POST', headers: sbHeaders(true) }); } catch (e) {}
+    sbSetSession(null);
+    localStorage.removeItem('sbCloudStamp');
+    localStorage.removeItem('sbLastSync');
+    location.reload();
+}
+
+async function sbSyncNow(){
+    if (!sbLoggedIn()) return;
+    sbUpdateSyncUI('sync');
+    try { await sbPush(); sbUpdateSyncUI('ok'); }
+    catch (e) { sbUpdateSyncUI('err'); }
+}
+
+function sbRenderSyncSection(){
+    const el = document.getElementById('sb-sync-section');
+    if (!el) return;
+    if (sbLoggedIn()) {
+        const s = sbSession();
+        const last = localStorage.getItem('sbLastSync');
+        const lastTxt = last ? new Date(last).toLocaleString('it-IT') : '—';
+        el.innerHTML = `
+            <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">☁️ Sincronizzazione team</div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Connesso come <strong>${esc(s.email || '')}</strong></div>
+            <div id="sb-sync-status" style="font-size:11px;color:var(--text3);margin-bottom:10px">Ultimo sync: ${esc(lastTxt)}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn" style="flex:1;min-width:130px;background:var(--accent);color:#fff" onclick="sbSyncNow()">🔄 Sincronizza ora</button>
+                <button class="btn btn-cancel" style="flex:1;min-width:130px" onclick="sbLogout()">Esci</button>
+            </div>`;
+    } else {
+        el.innerHTML = `
+            <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">☁️ Sincronizzazione team</div>
+            <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:10px">Accedi con l'account del team per avere gli stessi dati su tutti i dispositivi, in automatico.</div>
+            <div class="field" style="margin-bottom:8px"><label>Email team</label><input type="email" id="sb-email" placeholder="team@foodcost.it" autocomplete="username"></div>
+            <div class="field" style="margin-bottom:10px"><label>Password</label><input type="password" id="sb-pass" placeholder="••••••••" autocomplete="current-password"></div>
+            <button id="sb-login-btn" class="btn btn-p" style="width:100%" onclick="sbDoLogin()">Accedi</button>`;
+    }
 }
 
 function mostraImport(fornitore, ingredienti) {
@@ -1617,7 +1809,7 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function salva() { salvaDB(); renderTutto(); }
+function salva() { salvaDB(); renderTutto(); sbScheduleSync(); }
 
 // ── MENU / EVENTI: helper food cost ──
 function ingById(id){ return db().ingredienti.find(x => x.id === id); }
@@ -2555,6 +2747,16 @@ if (appDB.locali.length === 0 || !appDB.localeAttivoId) {
     mostraSelector();
 } else {
     avviaApp();
+}
+
+// Se connesso al team, all'avvio scarica l'ultima versione dal cloud (se più recente)
+if (sbLoggedIn()) {
+    sbPull().then(cloud => {
+        if (cloud && cloud.data && cloud.updated_at !== localStorage.getItem('sbCloudStamp')) {
+            sbApplyPayload(cloud.data, cloud.updated_at);
+            try { renderTutto(); } catch (e) {}
+        }
+    }).catch(() => {});
 }
 </script>
 </body>
