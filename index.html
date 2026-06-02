@@ -860,8 +860,21 @@
             📍 La trovi su <strong>console.anthropic.com</strong> → API Keys.<br>
             🔒 Non viene mai inviata a nessun server esterno.
         </div>
+
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">💾 Backup dati</div>
+            <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:10px">
+                Salva un file con tutto (materie prime, ricette, menu). Tienilo da parte: se cambi telefono o i dati si cancellano, lo reimporti e riprendi tutto.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn" style="flex:1;min-width:130px;background:var(--green);color:#fff" onclick="esportaBackup()">⬇️ Esporta backup</button>
+                <button class="btn" style="flex:1;min-width:130px;background:var(--accent);color:#fff" onclick="document.getElementById('import-backup-file').click()">⬆️ Importa backup</button>
+            </div>
+            <input type="file" id="import-backup-file" accept="application/json,.json" style="display:none" onchange="importaBackup(this)">
+        </div>
+
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 2.8 — Scanner a pezzo
+            🏷️ Versione 2.9 — Backup dati
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -1215,6 +1228,51 @@ function salvaSettings() {
     localStorage.setItem('anthropicApiKey', key);
     chiudiSettings();
     if (key) alert('✅ Chiave API salvata! Ora puoi usare la scansione fatture.');
+}
+
+function esportaBackup() {
+    try {
+        const dati = JSON.stringify(appDB, null, 2);
+        const blob = new Blob([dati], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const oggi = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `foodcost-backup-${oggi}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+        alert('❌ Errore durante l\'esportazione: ' + (e.message || e));
+    }
+}
+
+function importaBackup(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function() {
+        let parsed;
+        try { parsed = JSON.parse(reader.result); }
+        catch { alert('❌ File non valido: non è un backup leggibile.'); input.value = ''; return; }
+        if (!parsed || !Array.isArray(parsed.locali)) {
+            alert('❌ Questo file non sembra un backup di Food Cost Manager.');
+            input.value = ''; return;
+        }
+        const nLoc = parsed.locali.length;
+        const nIng = parsed.locali.reduce((t, l) => t + ((l.ingredienti || []).length), 0);
+        if (!confirm(`Ripristinare questo backup?\n\n${nLoc} locali · ${nIng} ingredienti.\n\n⚠️ Sostituirà TUTTI i dati attuali su questo dispositivo.`)) {
+            input.value = ''; return;
+        }
+        appDB = parsed;
+        if (!appDB.localeAttivoId && appDB.locali.length) appDB.localeAttivoId = appDB.locali[0].id;
+        salvaDB();
+        alert('✅ Backup ripristinato! L\'app si ricarica.');
+        location.reload();
+    };
+    reader.onerror = function() { alert('❌ Errore di lettura del file.'); input.value = ''; };
+    reader.readAsText(file);
 }
 
 function mostraImport(fornitore, ingredienti) {
