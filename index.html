@@ -674,7 +674,7 @@
                         <div class="card-title" style="margin-bottom:0">Lista Ingredienti</div>
                         <div style="position:relative;flex:1;max-width:260px;min-width:160px">
                             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none">🔍</span>
-                            <input type="text" id="search-ingredienti" placeholder="Cerca ingrediente..." oninput="renderMagazzino()" style="padding-left:32px;margin:0">
+                            <input type="search" id="search-ingredienti" name="fc-cerca-ingrediente" placeholder="Cerca ingrediente..." oninput="renderMagazzino()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore style="padding-left:32px;margin:0">
                         </div>
                     </div>
                     <div class="tbl-wrap">
@@ -701,17 +701,19 @@
                 <!-- IMPORTA RICETTA AI -->
                 <div class="card" style="border-color:rgba(138,114,181,0.3);background:linear-gradient(135deg,rgba(138,114,181,0.05),var(--surface))">
                     <div class="card-title" style="color:#8a72b5">✨ Importa Ricetta con AI <span class="ctag" style="background:rgba(138,114,181,0.1);color:#8a72b5">beta</span></div>
-                    <div class="card-sub">Incolla il testo della ricetta o scattane una foto: l'AI crea la distinta base e la abbina ai prezzi del magazzino per il food cost.</div>
+                    <div class="card-sub">Incolla il testo, carica una scheda (PDF/Word) o scattane una foto: l'AI estrae ingredienti e <strong>procedimento</strong>, li abbina ai prezzi del magazzino e crea la preparazione (o il piatto).</div>
                     <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
-                        <div class="field"><label>Nome piatto (opz.)</label><input type="text" id="ric-nome" placeholder="es. Orecchiette cime di rapa"></div>
-                        <div class="field"><label>Per quante porzioni è?</label><input type="number" id="ric-porzioni" min="1" value="4"></div>
+                        <div class="field"><label>Nome (opz.)</label><input type="text" id="ric-nome" placeholder="es. Salsa ponzu"></div>
+                        <div class="field"><label>Per quante porzioni? (1 = batch intero)</label><input type="number" id="ric-porzioni" min="1" value="1"></div>
                     </div>
                     <div class="field" style="margin-bottom:12px">
                         <label>Testo della ricetta</label>
-                        <textarea id="ric-testo" rows="4" placeholder="Incolla qui ingredienti e quantità…" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Jost',sans-serif;font-size:13px;line-height:1.5;resize:vertical"></textarea>
+                        <textarea id="ric-testo" rows="4" placeholder="Incolla qui ingredienti e procedimento…" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Jost',sans-serif;font-size:13px;line-height:1.5;resize:vertical"></textarea>
                     </div>
                     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                         <button id="ric-btn-ai" onclick="analizzaRicettaTesto()" class="btn" style="background:#8a72b5;color:#fff;box-shadow:0 2px 10px rgba(138,114,181,0.3)">✨ Analizza testo</button>
+                        <label for="ric-file" class="btn" style="background:#8a72b5;color:#fff;cursor:pointer">📄 Carica scheda (PDF/Word)</label>
+                        <input type="file" id="ric-file" accept=".pdf,.docx,.doc,image/*" style="display:none" onchange="analizzaRicettaFile(this)">
                         <label for="ric-foto-camera" class="btn" style="background:#fff;color:#8a72b5;border:1px solid #8a72b5;cursor:pointer">📷 Foto</label>
                         <input type="file" id="ric-foto-camera" accept="image/*" capture="environment" style="display:none" onchange="analizzaRicettaFoto(this)">
                         <label for="ric-foto-galleria" class="btn" style="background:#fff;color:#8a72b5;border:1px solid #8a72b5;cursor:pointer">🖼 Galleria</label>
@@ -896,7 +898,7 @@
         </div>
 
         <div style="margin-top:12px;padding:8px 10px;background:var(--surface3);border-radius:var(--r);font-size:12px;color:var(--text2);font-weight:600;text-align:center">
-            🏷️ Versione 3.5 — Accesso team in home
+            🏷️ Versione 3.7 — Schede AI e procedimento
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" onclick="chiudiSettings()">Annulla</button>
@@ -987,13 +989,24 @@
 <!-- MODAL IMPORT RICETTA -->
 <div class="modal-overlay hidden" id="modal-ricetta-overlay" style="align-items:flex-end;padding:0">
     <div class="modal" style="border-radius:var(--r3) var(--r3) 0 0;max-width:100%;width:100%;max-height:85vh;overflow-y:auto">
-        <div class="modal-title">🍽️ Ricetta rilevata</div>
-        <div class="modal-sub">Controlla ingredienti e grammi <strong>a porzione</strong>. Per quelli non a magazzino inserisci il prezzo €/Kg, oppure lasciali vuoti per escluderli.</div>
-        <div class="field" style="margin:4px 0 14px"><label>Nome piatto</label><input type="text" id="ric-imp-nome"></div>
+        <div class="modal-title">🧪 Ricetta rilevata</div>
+        <div class="modal-sub">Controlla ingredienti, quantità e procedimento. Per quelli non a magazzino inserisci un prezzo €/Kg (verranno creati col flag ✨ AI da verificare).</div>
+        <div class="field" style="margin:4px 0 12px"><label>Nome</label><input type="text" id="ric-imp-nome"></div>
+        <div class="field" style="margin:0 0 14px">
+            <label>Salva come</label>
+            <select id="ric-imp-target" onchange="renderImportRicetta()">
+                <option value="prep">🧪 Preparazione base (laboratorio, condivisa)</option>
+                <option value="piatto">🍽️ Piatto del locale</option>
+            </select>
+        </div>
         <div id="ric-imp-lista"></div>
+        <div class="field" style="margin:12px 0 4px">
+            <label>📖 Procedimento (lo legge chi cucina)</label>
+            <textarea id="ric-imp-proc" rows="6" placeholder="Passaggi della preparazione…" style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Jost',sans-serif;font-size:13px;line-height:1.5;resize:vertical"></textarea>
+        </div>
         <div class="modal-actions" style="position:sticky;bottom:0;background:var(--surface);padding-top:12px">
             <button class="btn btn-cancel" onclick="chiudiImportRicetta()">Annulla</button>
-            <button class="btn btn-p" onclick="confermaImportRicetta()">Crea piatto</button>
+            <button class="btn btn-p" onclick="confermaImportRicetta()">Salva</button>
         </div>
     </div>
 </div>
@@ -1750,8 +1763,8 @@ function mostraSelector() {
             loginWrap.innerHTML = `
                 <div style="background:rgba(95,158,127,0.07);border:1px solid rgba(95,158,127,0.32);border-radius:14px;padding:16px;margin-bottom:16px;text-align:left">
                     <div style="font-weight:700;color:var(--accent);margin-bottom:10px">👥 Accedi al team</div>
-                    <input type="email" id="sb-email-sel" placeholder="Email del team" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:11px;border:1px solid #d9d9d9;border-radius:8px;font-family:'Jost',sans-serif;font-size:14px">
-                    <input type="password" id="sb-pass-sel" placeholder="Password" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:11px;border:1px solid #d9d9d9;border-radius:8px;font-family:'Jost',sans-serif;font-size:14px">
+                    <input type="email" id="sb-email-sel" placeholder="Email del team" autocomplete="username" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:11px;border:1px solid #d9d9d9;border-radius:8px;font-family:'Jost',sans-serif;font-size:14px">
+                    <input type="password" id="sb-pass-sel" placeholder="Password" autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:11px;border:1px solid #d9d9d9;border-radius:8px;font-family:'Jost',sans-serif;font-size:14px">
                     <button onclick="sbDoLogin('sb-email-sel','sb-pass-sel')" class="btn btn-p" style="width:100%">Accedi e carica i dati</button>
                     <div style="text-align:center;color:var(--text3);font-size:12px;margin-top:12px">— oppure —</div>
                 </div>`;
@@ -2177,9 +2190,10 @@ ${magazzino.length ? JSON.stringify(magazzino) : 'nessuno'}
 Rispondi SOLO con JSON valido, senza testo né markdown:
 {
   "nomePiatto": "nome del piatto",
-  "ingredienti": [ { "nome": "ingrediente", "grammiTotali": 0 } ]
+  "ingredienti": [ { "nome": "ingrediente", "grammiTotali": 0 } ],
+  "procedimento": "il procedimento passo-passo, in testo chiaro per chi cucina. Mantieni i passaggi, le temperature, i tempi e le note. Se la ricetta non ha procedimento, lascia stringa vuota."
 }
-Includi solo ingredienti alimentari con una quantità stimabile.`;
+Includi solo ingredienti alimentari con una quantità stimabile. "grammiTotali" è la quantità per l'INTERA ricetta (il batch), non per porzione.`;
 }
 
 async function _chiamaRicettaAI(apiKey, content){
@@ -2245,36 +2259,118 @@ async function analizzaRicettaFoto(input){
     input.value = '';
 }
 
-function mostraImportRicetta(parsed, porzioni){
-    document.getElementById('ric-imp-nome').value = (document.getElementById('ric-nome').value || '').trim() || parsed.nomePiatto || 'Nuovo piatto';
-    _ricettaCandidati = (parsed.ingredienti || []).map(ing => {
-        const gTot = Math.max(0, parseFloat(ing.grammiTotali) || 0);
-        const gPorz = Math.round((gTot / porzioni) * 10) / 10;
-        return { nome: ing.nome || '', grammi: gPorz, ingId: abbinaIngrediente(ing.nome) };
+// Legge un file come base64 puro (senza prefisso data:)
+function _fileBase64(file){
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(',')[1] || '');
+        r.onerror = () => rej(new Error('Lettura file non riuscita'));
+        r.readAsDataURL(file);
     });
+}
+
+// Carica al volo mammoth.js (solo se serve, per i .docx)
+function _caricaMammoth(){
+    return new Promise((res, rej) => {
+        if (window.mammoth) return res(window.mammoth);
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+        s.onload = () => window.mammoth ? res(window.mammoth) : rej(new Error('mammoth non disponibile'));
+        s.onerror = () => rej(new Error('Impossibile caricare il lettore Word (serve connessione). Salva la scheda in PDF.'));
+        document.head.appendChild(s);
+    });
+}
+
+// Importa scheda da PDF, Word (.docx) o immagine
+async function analizzaRicettaFile(input){
+    const file = input.files[0];
+    if(!file) return;
+    const apiKey = localStorage.getItem('anthropicApiKey');
+    if(!apiKey){ alert('⚙️ Prima inserisci la tua API key dalle Impostazioni (icona ingranaggio in alto).'); input.value=''; return; }
+    const porzioni = Math.max(1, parseInt(document.getElementById('ric-porzioni').value) || 1);
+    const status = document.getElementById('ric-status');
+    const nome = (file.name || '').toLowerCase();
+    try {
+        let contentBlocks;
+        if (nome.endsWith('.pdf') || file.type === 'application/pdf') {
+            status.textContent = '📄 Leggo il PDF… (10-30 secondi)'; status.style.color = 'var(--accent)';
+            const b64 = await _fileBase64(file);
+            contentBlocks = [
+                { type:'document', source:{ type:'base64', media_type:'application/pdf', data: b64 } },
+                { type:'text', text: _ricPrompt(_ricMagazzinoCtx()) }
+            ];
+        } else if (nome.endsWith('.docx')) {
+            status.textContent = '📄 Leggo il file Word…'; status.style.color = 'var(--accent)';
+            const mammoth = await _caricaMammoth();
+            const buf = await file.arrayBuffer();
+            const out = await mammoth.extractRawText({ arrayBuffer: buf });
+            const testo = (out && out.value || '').trim();
+            if(!testo) throw new Error('Documento Word vuoto o illeggibile');
+            contentBlocks = [{ type:'text', text: `${_ricPrompt(_ricMagazzinoCtx())}\n\nRICETTA:\n${testo}` }];
+        } else if (nome.endsWith('.doc')) {
+            throw new Error('Il vecchio formato .doc non è supportato: salva la scheda come .docx o PDF.');
+        } else if (file.type.startsWith('image/')) {
+            status.textContent = '🖼 Preparazione immagine…'; status.style.color = 'var(--accent)';
+            const prepared = await preparaImmagine(file);
+            status.textContent = '✨ Leggo la ricetta… (10-20 secondi)';
+            contentBlocks = [
+                { type:'image', source:{ type:'base64', media_type:'image/jpeg', data: prepared.base64 } },
+                { type:'text', text: _ricPrompt(_ricMagazzinoCtx()) }
+            ];
+        } else {
+            throw new Error('Formato non riconosciuto. Usa PDF, Word (.docx) o immagine.');
+        }
+        status.textContent = '✨ Estraggo ingredienti e procedimento…'; status.style.color = 'var(--accent)';
+        const parsed = await _chiamaRicettaAI(apiKey, contentBlocks);
+        mostraImportRicetta(parsed, porzioni);
+        status.textContent = '';
+    } catch(err){
+        status.textContent = '❌ ' + (err.message || 'Errore'); status.style.color = 'var(--red)';
+        console.error(err);
+    }
+    input.value = '';
+}
+
+let _ricPorzioni = 1;
+function _ricTarget(){ return (document.getElementById('ric-imp-target')?.value) || 'prep'; }
+
+function mostraImportRicetta(parsed, porzioni){
+    _ricPorzioni = Math.max(1, porzioni || 1);
+    document.getElementById('ric-imp-nome').value = (document.getElementById('ric-nome').value || '').trim() || parsed.nomePiatto || 'Nuova preparazione';
+    const proc = document.getElementById('ric-imp-proc'); if (proc) proc.value = (parsed.procedimento || '').trim();
+    _ricettaCandidati = (parsed.ingredienti || []).map(ing => ({
+        nome: ing.nome || '',
+        grammiTot: Math.max(0, parseFloat(ing.grammiTotali) || 0),
+        ingId: abbinaIngrediente(ing.nome)
+    }));
     renderImportRicetta();
     document.getElementById('modal-ricetta-overlay').classList.remove('hidden');
 }
 
 function renderImportRicetta(){
+    const target = _ricTarget();
+    const lblQta = target === 'piatto' ? 'Grammi / porzione' : 'Grammi (batch totale)';
     const lista = document.getElementById('ric-imp-lista');
     lista.innerHTML = _ricettaCandidati.map((c, idx) => {
+        const grammi = target === 'piatto'
+            ? Math.round((c.grammiTot / _ricPorzioni) * 10) / 10
+            : Math.round(c.grammiTot * 10) / 10;
         const matched = c.ingId && ingById(c.ingId);
         const stato = matched
             ? `<div style="font-size:11px;color:var(--green);font-weight:600;margin-top:8px">✓ a magazzino: ${esc(ingById(c.ingId).nome)}</div>`
             : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-                   <div class="field"><label>€/Kg (nuovo)</label><input type="number" id="ric-prezzo-${idx}" step="0.01" min="0" placeholder="prezzo"></div>
+                   <div class="field"><label>€/Kg stimato</label><input type="number" id="ric-prezzo-${idx}" step="0.01" min="0" placeholder="prezzo"></div>
                    <div class="field"><label>Resa %</label><input type="number" id="ric-resa-${idx}" step="1" min="1" max="100" value="100"></div>
                </div>
-               <div style="font-size:10px;color:var(--yellow);margin-top:4px">⚠ non a magazzino — inserisci il prezzo per conteggiarlo</div>`;
+               <div style="font-size:10px;color:var(--yellow);margin-top:4px">⚠ non a magazzino — verrà creato col flag ✨ AI da verificare</div>`;
         return `<div style="border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:10px;background:var(--surface2)">
             <div style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" id="ric-check-${idx}" checked style="width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)">
                 <input type="text" id="ric-nome-${idx}" value="${esc(c.nome)}" style="flex:1;font-weight:600">
             </div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-                <label style="font-size:11px;color:var(--text3);font-weight:600;white-space:nowrap">Grammi / porzione</label>
-                <input type="number" id="ric-gr-${idx}" value="${c.grammi}" step="1" min="0" style="width:110px">
+                <label style="font-size:11px;color:var(--text3);font-weight:600;white-space:nowrap">${lblQta}</label>
+                <input type="number" id="ric-gr-${idx}" value="${grammi}" step="1" min="0" style="width:120px">
             </div>
             ${stato}
         </div>`;
@@ -2284,7 +2380,9 @@ function renderImportRicetta(){
 function chiudiImportRicetta(){ document.getElementById('modal-ricetta-overlay').classList.add('hidden'); _ricettaCandidati = []; }
 
 function confermaImportRicetta(){
-    const nome = document.getElementById('ric-imp-nome').value.trim() || 'Nuovo piatto';
+    const target = _ricTarget();
+    const nome = document.getElementById('ric-imp-nome').value.trim() || (target === 'piatto' ? 'Nuovo piatto' : 'Nuova preparazione');
+    const procedimento = (document.getElementById('ric-imp-proc').value || '').trim();
     const ricetta = [];
     _ricettaCandidati.forEach((c, idx) => {
         if(!document.getElementById(`ric-check-${idx}`)?.checked) return;
@@ -2296,22 +2394,26 @@ function confermaImportRicetta(){
             const prezzo = parseFloat(document.getElementById(`ric-prezzo-${idx}`)?.value);
             if(!prezzo || prezzo <= 0) return; // non a magazzino e senza prezzo → escluso
             const resa = parseFloat(document.getElementById(`ric-resa-${idx}`)?.value) || 100;
-            const nuovo = { id:'i'+Date.now()+idx, nome: nomeIng, prezzoLordo: prezzo, resa, fornitore:'—' };
+            const nuovo = { id:'i'+Date.now()+idx, nome: nomeIng, prezzoLordo: prezzo, resa, fornitore:'—', unita:'g', stimatoAI:true };
             appDB.ingredienti.push(nuovo);
             ingId = nuovo.id;
         }
         const esistente = ricetta.find(r => r.ingId === ingId);
         if(esistente) esistente.grammi += grammi; else ricetta.push({ ingId, grammi });
     });
-    if(!ricetta.length) return alert('Nessun ingrediente valido. Controlla i grammi e, per quelli non a magazzino, inserisci il prezzo.');
-    db().piatti.push({ id:'p'+Date.now(), nome, prezzoScelto:0, ricetta });
+    if(!ricetta.length) return alert('Nessun ingrediente valido. Controlla le quantità e, per quelli non a magazzino, inserisci il prezzo.');
+    if(target === 'piatto'){
+        db().piatti.push({ id:'p'+Date.now(), nome, prezzoScelto:0, ricetta, procedimento });
+    } else {
+        appDB.preparazioni.push({ id:'prep'+Date.now(), nome, ricetta, procedimento });
+    }
     chiudiImportRicetta();
     document.getElementById('ric-testo').value = '';
     document.getElementById('ric-nome').value = '';
     salva();
     switchTab('ricettario');
     const st = document.getElementById('ric-status');
-    st.textContent = `✅ Piatto "${nome}" creato con ${ricetta.length} ingredienti!`;
+    st.textContent = `✅ ${target === 'piatto' ? 'Piatto' : 'Preparazione'} "${nome}" creata con ${ricetta.length} ingredienti!`;
     st.style.color = 'var(--green)';
 }
 
@@ -2346,6 +2448,13 @@ function rimuoviIng(pid, iid) {
     const p = findRicetta(pid);
     if (!p) return;
     p.ricetta = p.ricetta.filter(r => r.ingId !== iid);
+    salva();
+}
+
+function salvaProcedimento(pid){
+    const p = findRicetta(pid);
+    if(!p) return;
+    p.procedimento = (document.getElementById('proc-'+pid)?.value || '').trim();
     salva();
 }
 
@@ -2435,10 +2544,15 @@ function renderRicettario() {
                         </tr></tfoot>
                     </table>
                 </div>
+                <details class="proc-box"${p.procedimento ? ' open' : ''} style="margin:10px 0;border:1px solid var(--border);border-radius:var(--r2);padding:0 12px;background:var(--surface2)">
+                    <summary style="cursor:pointer;font-weight:700;font-size:13px;padding:10px 0;color:#8a72b5">📖 Procedimento</summary>
+                    <textarea id="proc-${p.id}" rows="5" placeholder="Scrivi qui il procedimento per la cucina…" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:9px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'Jost',sans-serif;font-size:13px;line-height:1.55;resize:vertical">${esc(p.procedimento||'')}</textarea>
+                    <button onclick="salvaProcedimento('${p.id}')" class="btn" style="background:#8a72b5;color:#fff;margin-bottom:12px;font-size:12px;padding:7px 12px">💾 Salva procedimento</button>
+                </details>
                 <div class="add-row">
                     <div class="field" style="flex:1">
                         <label>Cerca e seleziona ingrediente</label>
-                        <input type="text" id="search-${p.id}" placeholder="🔍 Scrivi per cercare..." list="dl-${p.id}" autocomplete="off">
+                        <input type="text" id="search-${p.id}" placeholder="🔍 Scrivi per cercare..." list="dl-${p.id}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore name="fc-cerca-ric">
                         <datalist id="dl-${p.id}">${ingOrdinati.map(i=>`<option value="${esc(i.nome)}" data-id="${i.id}">`).join('')}</datalist>
                         <select id="sel-${p.id}" style="margin-top:6px">${opts}</select>
                     </div>
